@@ -103,8 +103,8 @@
           <header class="term-head">
             <div class="term-tabs" id="term-tabs"></div>
             <div class="term-actions">
-              <button id="term-follow" title="终端跟随浏览：进文件夹时自动 cd 过去">跟随</button>
-              <button id="term-locate" title="把文件区定位到终端当前目录">定位</button>
+              <button id="term-follow" title="终端跟随浏览：进文件夹时终端自动 cd 过去"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>终端跟随</button>
+              <button id="term-locate" title="把文件区跳到终端当前所在目录"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>定位文件</button>
               <button id="term-newtab" title="新终端">＋</button>
               <button id="term-dock" title="切换 上下 / 左右 布局">⇆</button>
               <button id="term-close" title="收起终端">✕</button>
@@ -149,6 +149,7 @@
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/highlight.min.js" onerror="window.__noHljs=1"></script>
   <script src="/vendor/xterm/xterm.js" onerror="window.__noXterm=1"></script>
   <script src="/vendor/xterm/addon-fit.js" onerror="window.__noXterm=1"></script>
+  <script src="/vendor/xterm/addon-webgl.js" onerror="window.__noWebgl=1"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -447,3 +447,17 @@ kbd {
 /* 终端头：跟随/定位 文字按钮 */
 .term-actions #term-follow, .term-actions #term-locate { font-size: 11px; padding: 3px 8px; font-family: var(--font-ui); }
 .term-actions #term-follow.on { color: var(--accent-ink); background: var(--accent); }
+
+/* ---------- 换肤平滑过渡（消除硬切撕裂）---------- */
+#sidebar, #topbar, #content, #preview, #terminal-panel, .term-head, #filter-bar, #main {
+  transition: background-color 0.28s ease, border-color 0.28s ease;
+}
+
+/* ---------- 桌面 app：侧栏 vibrancy 毛玻璃（半透让窗口材质透出）---------- */
+.desktop #main, .desktop #content, .desktop #preview, .desktop #terminal-panel, .desktop #topbar { background-color: var(--bg); }
+.desktop #topbar { background-color: var(--bg-2); }
+.desktop #sidebar { background-color: color-mix(in srgb, var(--panel) 80%, transparent); }
+
+/* 跟随/定位 改为图标+文字，覆盖前面的纯文字规则 */
+.term-actions #term-follow, .term-actions #term-locate { display: inline-flex; align-items: center; gap: 4px; }
+.term-actions #term-follow svg, .term-actions #term-locate svg { flex-shrink: 0; }

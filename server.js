@@ -174,9 +174,13 @@ async function readFile(filePath) {
       info.tooLarge = true;
       const fd = await fsp.open(file, 'r');
       const buf = Buffer.alloc(256 * 1024);
-      await fd.read(buf, 0, buf.length, 0);
+      const { bytesRead } = await fd.read(buf, 0, buf.length, 0);
       await fd.close();
-      info.content = buf.toString('utf8') + '\n\n… (文件较大，仅显示前 256KB)';
+      // 回退到完整 UTF-8 边界，避免把末尾多字节字符切坏成 �
+      let end = bytesRead;
+      while (end > 0 && (buf[end - 1] & 0xC0) === 0x80) end--;
+      if (end > 0 && (buf[end - 1] & 0xC0) === 0xC0) end--;
+      info.content = buf.toString('utf8', 0, end) + '\n\n… (文件较大，仅显示前 256KB)';
     } else {
       info.content = await fsp.readFile(file, 'utf8');
     }
@@ -313,11 +317,21 @@ async function recentFiles(rootPath) {
 // ---------- 文件操作（编辑 / 废纸篓 / 重命名 / 新建）----------
 // 都带护栏：编辑只认文本类、删除走系统废纸篓可恢复、名称拒绝路径分隔符与空字节。
 
-async function writeTextFile(p, content) {
+async function writeTextFile(p, content, expectedMtime) {
   const file = resolvePath(p);
   if (!TEXT_EXT.has(ext(file))) throw new Error('只支持文本类文件编辑');
   if (typeof content !== 'string') throw new Error('内容非法');
-  await fsp.writeFile(file, content, 'utf8');
+  // 并发覆盖保护：打开编辑后文件被外部（如 agent）改过，拒绝盲覆盖
+  if (expectedMtime) {
+    let cur = 0;
+    try { cur = (await fsp.stat(file)).mtimeMs; } catch { /* 新文件 */ }
+    if (cur && Math.abs(cur - expectedMtime) > 1) { const e = new Error('文件已被外部修改'); e.conflict = true; throw e; }
+  }
+  // 原子写：临时文件 + fsync + rename，写到一半崩溃也不会损坏原文件
+  const tmp = file + '.fanbox-tmp-' + process.pid;
+  const fh = await fsp.open(tmp, 'w');
+  try { await fh.writeFile(content, 'utf8'); await fh.sync(); } finally { await fh.close(); }
+  await fsp.rename(tmp, file);
   const st = await fsp.stat(file);
   return { ok: true, size: st.size, mtime: st.mtimeMs };
 }
@@ -331,8 +345,8 @@ function trashPath(p) {
     try { isDir = fs.lstatSync(target).isDirectory(); } catch { return resolve({ ok: false, error: '文件不存在' }); }
     let cmd;
     if (PLATFORM === 'darwin') {
-      const esc = target.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      cmd = `osascript -e 'tell application "Finder" to delete (POSIX file "${esc}")'`;
+      // 路径走 argv，不拼进单引号 AppleScript 字面量——避免含 ' 的文件名删除失败/注入
+      cmd = `osascript -e 'on run argv' -e 'tell application "Finder" to delete (POSIX file (item 1 of argv))' -e 'end run' ${shellQuote(target)}`;
     } else if (PLATFORM === 'win32') {
       const method = isDir ? 'DeleteDirectory' : 'DeleteFile';
       const ps = target.replace(/'/g, "''");
@@ -345,11 +359,14 @@ function trashPath(p) {
 }
 
 function validName(name) {
-  return name && typeof name === 'string' && !/[\/\\\0]/.test(name) && name !== '.' && name !== '..';
+  if (!name || typeof name !== 'string') return false;
+  const n = name.trim();
+  return n.length > 0 && n.length <= 255 && !/[\/\\\0]/.test(n) && n !== '.' && n !== '..';
 }
 
 async function renamePath(p, newName) {
   const src = resolvePath(p);
+  newName = (newName || '').trim();
   if (!validName(newName)) throw new Error('名称不合法');
   const dst = path.join(path.dirname(src), newName);
   if (fs.existsSync(dst)) throw new Error('已存在同名项');
@@ -359,6 +376,7 @@ async function renamePath(p, newName) {
 
 async function createEntry(parentPath, name, type) {
   const parent = resolvePath(parentPath);
+  name = (name || '').trim();
   if (!validName(name)) throw new Error('名称不合法');
   const target = path.join(parent, name);
   if (fs.existsSync(target)) throw new Error('已存在同名项');
@@ -526,7 +544,8 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/write' && req.method === 'POST') {
       const b = await readBody(req);
-      return sendJSON(res, 200, await writeTextFile(b.path, b.content));
+      try { return sendJSON(res, 200, await writeTextFile(b.path, b.content, b.expectedMtime)); }
+      catch (e) { return sendJSON(res, 200, { ok: false, conflict: !!e.conflict, error: e.message }); }
     }
     if (p === '/api/trash' && req.method === 'POST') {
       const b = await readBody(req);

@@ -5,7 +5,7 @@
  * 复用零依赖后端 server.js（文件能力），叠加 node-pty 内嵌终端，
  * 让 TUI coding agent（Claude Code / Codex / Aider…）在界面里直接跑起来。
  */
-const { app, BrowserWindow, ipcMain, shell, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, nativeImage, Menu } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -28,6 +28,8 @@ function createWindow() {
     width: 1320, height: 860, minWidth: 920, minHeight: 600,
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#0b0c0a',
+    vibrancy: 'sidebar',
+    visualEffectState: 'active',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -54,8 +56,30 @@ app.whenReady().then(() => {
     try { app.dock.setIcon(nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png'))); } catch { /* */ }
   }
   app.setName('翻箱 FanBox');
+  buildMenu();
   createWindow();
 });
+
+// 原生菜单——关键是 Edit role，终端里的 ⌘C/⌘V 才生效
+function buildMenu() {
+  const isMac = process.platform === 'darwin';
+  const template = [
+    ...(isMac ? [{ role: 'appMenu', label: '翻箱 FanBox' }] : []),
+    { label: '文件', submenu: [isMac ? { role: 'close' } : { role: 'quit' }] },
+    { label: '编辑', submenu: [
+      { role: 'undo', label: '撤销' }, { role: 'redo', label: '重做' }, { type: 'separator' },
+      { role: 'cut', label: '剪切' }, { role: 'copy', label: '复制' }, { role: 'paste', label: '粘贴' },
+      { role: 'selectAll', label: '全选' },
+    ] },
+    { label: '视图', submenu: [
+      { role: 'reload', label: '重新加载' }, { role: 'toggleDevTools', label: '开发者工具' },
+      { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
+      { type: 'separator' }, { role: 'togglefullscreen', label: '全屏' },
+    ] },
+    { role: 'window', label: '窗口', submenu: [{ role: 'minimize', label: '最小化' }, { role: 'zoom' }] },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 app.on('window-all-closed', () => {
   terminals.forEach((p) => { try { p.kill(); } catch { /* */ } });
@@ -111,7 +135,8 @@ ipcMain.handle('fs:watch', (e, { dir }) => {
   watcher = null; watchDir = null;
   if (!dir || !fs.existsSync(dir)) return { ok: false };
   try {
-    watcher = fs.watch(dir, { persistent: false }, (evt, filename) => {
+    // 递归监听：agent 在子目录改文件也能触发刷新（前端按 250ms 防抖，事件风暴只刷一次）
+    watcher = fs.watch(dir, { persistent: false, recursive: true }, (evt, filename) => {
       if (win && !win.isDestroyed()) win.webContents.send('fs:changed', { dir, filename: filename ? filename.toString() : null });
     });
     watchDir = dir;

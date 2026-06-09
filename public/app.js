@@ -486,9 +486,16 @@ async function enterEditMode(e) {
   const ta = $('#ed-area');
   ta.value = data.content || '';
   ta.focus();
-  const save = async () => {
-    const r = await apiPost('/api/write', { path: e.path, content: ta.value });
-    if (r.error) { toast('保存失败：' + r.error, true); return; }
+  let baseMtime = data.mtime; // 并发覆盖保护基准
+  const save = async (force) => {
+    const r = await apiPost('/api/write', { path: e.path, content: ta.value, expectedMtime: force ? 0 : baseMtime });
+    if (r.conflict) {
+      const ok = await confirmDialog('文件已被外部修改（可能是 agent 改的）。覆盖会丢掉外部改动，确定覆盖？');
+      if (ok) return save(true);
+      return;
+    }
+    if (r.ok === false || r.error) { toast('保存失败：' + (r.error || ''), true); return; }
+    baseMtime = r.mtime;
     toast('已保存');
     await refresh();
     openPreview(state.entries.find((x) => x.path === e.path) || e);
@@ -511,6 +518,11 @@ async function doRename(e) {
   await refresh();
 }
 async function doTrash(e) {
+  // 文件秒删（花叔的选择），但删整个文件夹给一次轻确认——误删项目目录代价高
+  if (e.isDir) {
+    const ok = await confirmDialog(`把文件夹「${e.name}」移到废纸篓？可从废纸篓恢复。`);
+    if (!ok) return;
+  }
   const r = await apiPost('/api/trash', { path: e.path });
   if (r.error) { toast('删除失败：' + r.error + '（首次需在弹窗里允许控制 Finder）', true); return; }
   toast('已移到废纸篓，可从废纸篓恢复');
@@ -548,6 +560,22 @@ function inputDialog(title, value = '', placeholder = '') {
       if (ev.key === 'Enter') { ev.preventDefault(); done(inp.value.trim()); }
       else if (ev.key === 'Escape') { ev.preventDefault(); done(null); }
     });
+  });
+}
+// 是/否确认弹窗
+function confirmDialog(msg) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'input-overlay';
+    ov.innerHTML = `<div class="input-dialog"><div class="input-title">${escapeHtml(msg)}</div><div class="input-actions"><button class="ghost-btn" data-act="no">取消</button><button class="primary" data-act="yes">确定</button></div></div>`;
+    document.body.appendChild(ov);
+    const done = (v) => { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
+    function onKey(ev) { if (ev.key === 'Escape') { ev.preventDefault(); done(false); } else if (ev.key === 'Enter') { ev.preventDefault(); done(true); } }
+    ov.querySelector('[data-act=yes]').onclick = () => done(true);
+    ov.querySelector('[data-act=no]').onclick = () => done(false);
+    ov.onclick = (ev) => { if (ev.target === ov) done(false); };
+    document.addEventListener('keydown', onKey, true);
+    ov.querySelector('[data-act=yes]').focus();
   });
 }
 // 右键上下文菜单
@@ -841,6 +869,9 @@ function bindEvents() {
   $('#term-follow').onclick = () => term.setFollow(!term.followBrowse);
   $('#term-locate').onclick = () => term.locateCwd();
   if (term.followBrowse) $('#term-follow').classList.add('on');
+  // 终端随窗口尺寸变化重排，避免 TUI 错位
+  window.addEventListener('resize', () => term.fitActive());
+  if (window.ResizeObserver) new ResizeObserver(() => term.fitActive()).observe($('#xterm-host'));
   bindTerminalResizer();
   $('#btn-new-dir').onclick = () => doCreate('dir');
   $('#btn-new-file').onclick = () => doCreate('file');
@@ -927,15 +958,25 @@ const term = {
   dock: localStorage.getItem('fb_term_dock') || 'bottom',
   followBrowse: localStorage.getItem('fb_term_follow') === '1',
   available() { return !!(window.fanboxPty && window.Terminal && !window.__noXterm); },
-  theme() {
-    const cs = getComputedStyle(document.documentElement);
-    const v = (n, f) => (cs.getPropertyValue(n).trim() || f);
-    return {
-      background: v('--bg', '#0b0c0a'), foreground: v('--text', '#f2f2ea'),
-      cursor: v('--accent', '#cdf24b'), cursorAccent: v('--bg', '#0b0c0a'),
-      selectionBackground: v('--accent-soft', '#cdf24b33'),
-    };
+  // 每套皮肤一整套手调 ANSI 主题——暗皮肤暗终端、亮皮肤亮终端，不再出现「暖纸里嵌黑块」
+  themes: {
+    terminal: {
+      background: '#0b0c0a', foreground: '#d6dac9', cursor: '#cdf24b', cursorAccent: '#0b0c0a', selectionBackground: '#cdf24b40',
+      black: '#1c1e17', red: '#e8825b', green: '#cdf24b', yellow: '#e8c95b', blue: '#7bc9e8', magenta: '#d68ad6', cyan: '#5bd6c0', white: '#d6dac9',
+      brightBlack: '#62655a', brightRed: '#ff9b73', brightGreen: '#dcff66', brightYellow: '#ffe082', brightBlue: '#9ad8ff', brightMagenta: '#f0a8f0', brightCyan: '#7fffe0', brightWhite: '#f2f2ea',
+    },
+    warm: {
+      background: '#ece2d2', foreground: '#4a3f30', cursor: '#cc785c', cursorAccent: '#ece2d2', selectionBackground: '#cc785c33',
+      black: '#3a3025', red: '#b5502f', green: '#5f7a36', yellow: '#9a7b2e', blue: '#3a6a8a', magenta: '#9a5a7a', cyan: '#3a7a70', white: '#6b6355',
+      brightBlack: '#8a7d68', brightRed: '#c75f38', brightGreen: '#6f8a40', brightYellow: '#b08a30', brightBlue: '#4a7a9a', brightMagenta: '#aa6a8a', brightCyan: '#4a8a82', brightWhite: '#3a3025',
+    },
+    editorial: {
+      background: '#eae5d8', foreground: '#1a1a1a', cursor: '#ff433d', cursorAccent: '#eae5d8', selectionBackground: '#ff433d22',
+      black: '#0a0a0a', red: '#cc1f1a', green: '#00803a', yellow: '#8a6d00', blue: '#0000cc', magenta: '#9a2a8a', cyan: '#007a8a', white: '#57534a',
+      brightBlack: '#57534a', brightRed: '#e8302a', brightGreen: '#00a33e', brightYellow: '#a67c00', brightBlue: '#2222dd', brightMagenta: '#b03aa0', brightCyan: '#008a9a', brightWhite: '#0a0a0a',
+    },
   },
+  theme() { return this.themes[state.theme] || this.themes.terminal; },
   toggle() {
     if (!this.available()) { if (state.cwd) openWith(state.cwd, 'terminal'); return; } // 浏览器降级到系统终端
     const hidden = $('#terminal-panel').classList.contains('hidden');
@@ -1005,15 +1046,33 @@ const term = {
     const fit = FitCtor ? new FitCtor() : null;
     if (fit) xterm.loadAddon(fit);
     xterm.open(host);
+    // WebGL 渲染加速（大输出/TUI 不掉帧），失败或上下文丢失回退 DOM
+    if (!window.__noWebgl && window.WebglAddon) {
+      try {
+        const Wg = window.WebglAddon.WebglAddon || window.WebglAddon;
+        const wg = new Wg();
+        wg.onContextLoss(() => { try { wg.dispose(); } catch { /* */ } });
+        xterm.loadAddon(wg);
+      } catch { /* 回退默认 DOM renderer */ }
+    }
     if (fit) try { fit.fit(); } catch { /* */ }
-    const sess = { id, xterm, fit, host, title: baseOf(startDir || '') || 'shell' };
+    const sess = { id, xterm, fit, host, dead: false, title: baseOf(startDir || '') || 'shell' };
     this.sessions.push(sess);
     this.activate(id);
     const r = await window.fanboxPty.spawn({ id, cwd: startDir, cols: xterm.cols, rows: xterm.rows });
     if (!r.ok) { xterm.write('\r\n  \x1b[31m终端启动失败：' + (r.error || '') + '\x1b[0m\r\n'); }
-    xterm.onData((d) => window.fanboxPty.input(id, d));
+    xterm.onData((d) => {
+      if (sess.dead) { if (d === '\r' || d === '\n') this.respawn(sess); return; } // 进程退出后回车真重开
+      window.fanboxPty.input(id, d);
+    });
     xterm.onResize(({ cols, rows }) => window.fanboxPty.resize(id, cols, rows));
     this.renderTabs();
+  },
+  async respawn(sess) {
+    sess.dead = false;
+    sess.xterm.write('\r\n');
+    const r = await window.fanboxPty.spawn({ id: sess.id, cwd: state.cwd, cols: sess.xterm.cols, rows: sess.xterm.rows });
+    if (!r.ok) { sess.dead = true; sess.xterm.write('\x1b[31m重开失败：' + (r.error || '') + '\x1b[0m\r\n'); }
   },
   activate(id) {
     this.active = id;
@@ -1055,7 +1114,7 @@ const term = {
 // pty 数据回流（全局一次）
 if (window.fanboxPty) {
   window.fanboxPty.onData(({ id, data }) => { const s = term.sessions.find((x) => x.id === id); if (s) s.xterm.write(data); });
-  window.fanboxPty.onExit(({ id }) => { const s = term.sessions.find((x) => x.id === id); if (s) s.xterm.write('\r\n\x1b[90m[进程已退出，按 ✕ 关闭或回车重开]\x1b[0m\r\n'); });
+  window.fanboxPty.onExit(({ id }) => { const s = term.sessions.find((x) => x.id === id); if (s) { s.dead = true; s.xterm.write('\r\n\x1b[90m[进程已退出 — 回车重开，或 ✕ 关闭]\x1b[0m\r\n'); } });
 }
 // 文件变化 → 自动刷新列表（看着 agent 干活）；编辑中不动预览，避免吞掉未保存内容
 if (window.fanboxFs) {
