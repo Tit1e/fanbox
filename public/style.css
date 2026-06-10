@@ -179,6 +179,8 @@ kbd {
   margin-left: 8px; font-size: 10px; padding: 2px 7px; border-radius: 20px;
   background: var(--green); color: #062018; font-weight: 700;
 }
+/* 项目配对色点：和终端标签的图标同色，扫一眼知道文件区与哪个终端是一伙的 */
+.breadcrumb .crumb-proj { width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; flex: none; align-self: center; }
 
 .topbar-actions { display: flex; align-items: center; gap: 10px; }
 .toggle { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; cursor: pointer; }

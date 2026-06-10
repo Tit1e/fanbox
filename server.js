@@ -284,7 +284,7 @@ function fuzzyScore(query, target) {
   return score;
 }
 
-async function searchFiles(query, rootPath) {
+async function searchFiles(query, rootPath, deadlineTs) {
   const root = resolvePath(rootPath);
   const q = (query || '').trim();
   if (!q) return { results: [] };
@@ -299,7 +299,7 @@ async function searchFiles(query, rootPath) {
   };
   const { truncated } = await walk(root, {
     limit: 60000,
-    deadline: Date.now() + 4000,
+    deadline: deadlineTs || Date.now() + 4000, // 多根搜索时传共享截止点，封顶总耗时
     onFile: (f) => scoreInto(f, 0),
     // 文件夹小幅加权——vibe coding「一下午起十个项目」，最常找的就是项目目录本身
     onDir: (f) => scoreInto(f, 6),
@@ -487,10 +487,11 @@ async function createEntry(parentPath, name, type) {
   return { ok: true, path: target, isDir: type === 'dir' };
 }
 
-// 终端里点文件名 → 定位真实文件：直接 stat → 用 tail 做「空格扩展」逐候选 stat → basename 搜索。
+// 终端里点文件名 → 定位真实文件：直接 stat → 用 tail 做「空格扩展」逐候选 stat
+// → scrollback 回扫候选（alt）逐个 stat → 多根 basename 搜索。
 // 空格扩展：前端对带空格的文件名（macOS 截屏等）只能保守匹配到第一个空格，真实边界
 // 由文件系统验证——把行尾余文按空格边界逐段拼回路径，哪个候选 stat 命中就是哪个
-async function locatePath(p, name, root, tail) {
+async function locatePath(p, name, root, tail, alt, roots) {
   const tryStat = async (cand) => {
     try { const real = resolvePath(cand); const st = await fsp.stat(real); return { found: true, path: real, isDir: st.isDirectory() }; }
     catch { return null; }
@@ -511,13 +512,28 @@ async function locatePath(p, name, root, tail) {
       }
     }
   }
-  if (name && root) {
-    try {
-      const data = await searchFiles(name, resolvePath(root));
-      const exact = (data.results || []).find((r) => r.name === name);
-      const best = exact || (data.results || [])[0];
-      if (best) return { found: true, path: best.path, isDir: best.isDir, viaSearch: true };
-    } catch { /* */ }
+  // scrollback 回扫候选（最近出现在前）：stat 验证，命中即信——它来自 agent 自己打印的全路径
+  for (const a of String(alt || '').split('\n').filter(Boolean).slice(0, 3)) {
+    const hit = await tryStat(a);
+    if (hit) return { ...hit, viaScrollback: true };
+  }
+  if (name) {
+    // 多根 basename 搜索：终端 cwd + 活跃项目根（前端传来）；同名多个取 mtime 最新（偏向「我刚生成的」）。
+    // 所有根共享一个总截止点，避免点了不存在的名时多根 walk 串成十几秒
+    const budget = Date.now() + 6000;
+    const seen = []; let fuzzy = null;
+    for (const r of [root, ...(roots || [])].filter(Boolean)) {
+      let rr; try { rr = resolvePath(r); } catch { continue; }
+      if (seen.some((d) => rr === d || rr.startsWith(d + path.sep))) continue; // 嵌套根去重
+      seen.push(rr);
+      try {
+        const data = await searchFiles(name, rr, budget);
+        const exact = (data.results || []).filter((x) => x.name === name).sort((a, b) => b.mtime - a.mtime)[0];
+        if (exact) return { found: true, path: exact.path, isDir: exact.isDir, viaSearch: true };
+        if (!fuzzy) fuzzy = (data.results || [])[0];
+      } catch { /* */ }
+    }
+    if (fuzzy) return { found: true, path: fuzzy.path, isDir: fuzzy.isDir, viaSearch: true };
   }
   return { found: false };
 }
@@ -837,7 +853,8 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 200, await recentFiles(qp.get('root') || HOME));
     }
     if (p === '/api/locate') {
-      return sendJSON(res, 200, await locatePath(qp.get('path'), qp.get('name'), qp.get('root'), qp.get('tail')));
+      const extraRoots = String(qp.get('roots') || '').split('\n').filter(Boolean).slice(0, 3);
+      return sendJSON(res, 200, await locatePath(qp.get('path'), qp.get('name'), qp.get('root'), qp.get('tail'), qp.get('alt'), extraRoots));
     }
     if (p === '/api/git') {
       return sendJSON(res, 200, await gitStatus(qp.get('path') || HOME));

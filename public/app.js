@@ -306,6 +306,20 @@ function renderBreadcrumb() {
     el.onclick = () => navigate(c.path);
     bc.appendChild(el);
   });
+  // 项目配对色点：当前浏览目录落在某个终端的项目里 → 末级面包屑挂同款色，和终端标签图标呼应
+  if (typeof term !== 'undefined' && term.sessions.length) {
+    const ts = term.sessions
+      // 排掉 / 和家目录这类浅根：它们 startsWith 任何路径都成立，色点会常亮、配对语义失效
+      .filter((s) => s.cwd && s.cwd !== '/' && s.cwd !== state.home && (state.cwd === s.cwd || (state.cwd || '').startsWith(s.cwd.replace(/\/$/, '') + '/')))
+      .sort((a, b) => b.cwd.length - a.cwd.length)[0];
+    if (ts) {
+      const d = document.createElement('span');
+      d.className = 'crumb-proj';
+      d.style.background = `hsl(${term.hueOf(ts.cwd)} 62% 48%)`;
+      d.title = '终端「' + (ts.title || '') + '」正在这个项目里干活';
+      bc.appendChild(d);
+    }
+  }
   if (state.project) {
     const b = document.createElement('span');
     b.className = 'proj-badge';
@@ -1578,7 +1592,7 @@ function bindEvents() {
   $('#btn-recent').onclick = showRecent;
   $('#btn-changes').onclick = () => toggleChangesPanel();
   $('#btn-terminal').onclick = () => term.toggle();
-  $('#term-claude').onclick = () => term.launchAgent('claude');
+  $('#term-claude').onclick = () => term.launchAgent('claude --dangerously-skip-permissions', true);
   $('#term-codex').onclick = () => term.launchAgent('codex');
   $('#term-newtab').onclick = () => term.newTab();
   $('#term-max').onclick = () => term.toggleMax();
@@ -1718,6 +1732,9 @@ function applyTheme(skin, rerender = true) {
 }
 
 // ---------- 内嵌终端（仅桌面 app；浏览器版优雅降级）----------
+// agent「等你拍板」界面特征（claude code 2.1.x / codex 0.13x 实测文案，宁缺勿滥：
+// 不命中只是退化成「任务完成」标题，不会漏响）
+const TERM_ASK_RE = /(Do you want to (proceed|continue|make this edit|allow|use this)|Would you like to proceed|Ready to code\?|created or one you trust\?|tell (Claude|Codex) what to do differently|Yes, and don't ask again|Allow Codex to (run|apply|create)|Codex wants to|[❯›][ \t]*1\.[ \t]*Yes)/;
 const term = {
   sessions: [], seq: 0, active: null, maximized: false,
   dock: localStorage.getItem('fb_term_dock') || 'bottom',
@@ -1791,32 +1808,32 @@ const term = {
     if (b) { b.classList.toggle('on', this.maximized); b.title = this.maximized ? '还原终端' : '终端铺满'; }
     this.fitActive();
   },
-  // 在指定目录开终端（新标签）；浏览器版降级到系统终端
+  // 在指定目录开终端（新标签）；浏览器版降级到系统终端。返回新 session（spawn 完成后）
   openInDir(dir) {
-    if (!this.available()) { openWith(dir, 'terminal'); return; }
+    if (!this.available()) { openWith(dir, 'terminal'); return null; }
     $('#terminal-panel').classList.remove('hidden');
     $('#terminal-resizer').classList.remove('hidden');
     this.applyDock();
     $('#btn-terminal').classList.add('active');
-    this.newTab(dir);
+    localStorage.setItem('fb_term_open', '1'); // 右键/一键开终端也记住开合，和 open/close 对称
+    return this.newTab(dir);
   },
   // 拖拽文件/文件夹进来：把 shell 转义后的路径插入活动终端（作为 agent 上下文）
   insertPath(p) {
     if (!this.available()) { openWith(dirOf(p), 'terminal'); return; }
     const wasHidden = $('#terminal-panel').classList.contains('hidden');
     if (wasHidden) this.open();
-    const write = () => { if (this.active) window.fanboxPty.input(this.active, shQuote(p) + ' '); const s = this.sessions.find((x) => x.id === this.active); if (s) s.xterm.focus(); };
+    const write = () => { if (this.active) this.input(this.active, shQuote(p) + ' '); const s = this.sessions.find((x) => x.id === this.active); if (s) s.xterm.focus(); };
     if (wasHidden) setTimeout(write, 280); else write();
   },
-  // 一键在活动终端启动 coding agent（终端没开就先开、没标签就建一个）
-  launchAgent(cmd) {
+  // 一键在终端启动 coding agent；newTab=true 总是新开标签跑，不打扰当前会话
+  async launchAgent(cmd, newTab) {
     if (!this.available()) { openWith(state.cwd, 'terminal'); return; } // 网页版降级到系统终端
-    const wasHidden = $('#terminal-panel').classList.contains('hidden');
-    if (wasHidden) this.open();
-    if (!this.sessions.length) this.newTab();
-    const run = () => { if (this.active) { window.fanboxPty.input(this.active, cmd + '\r'); const s = this.sessions.find((x) => x.id === this.active); if (s) s.xterm.focus(); } };
-    setTimeout(run, wasHidden || !this.sessions.length ? 340 : 0);
-    toast('已在终端启动 ' + cmd);
+    let sess;
+    if (newTab || !this.sessions.length) sess = await this.openInDir(state.cwd); // 等 spawn 完，拿确切 session 写入
+    else { if ($('#terminal-panel').classList.contains('hidden')) this.open(); sess = this.sessions.find((x) => x.id === this.active); }
+    if (sess && !sess.dead) { this.input(sess.id, cmd + '\r'); sess.xterm.focus(); toast('已在终端启动 ' + cmd); }
+    else toast('终端启动失败', true);
   },
   // 把预览里选中的文字作为「上下文」喂给终端 agent：带文件出处 + 围栏，bracketed paste 防逐行误提交
   sendContext(text, srcPath) {
@@ -1829,35 +1846,86 @@ const term = {
     const write = () => {
       if (!this.active) return;
       // \x1b[200~ … \x1b[201~ 是 bracketed paste：多行内容当作一次粘贴，不会被 shell/TUI agent 逐行执行
-      window.fanboxPty.input(this.active, '\x1b[200~' + block + '\x1b[201~');
+      this.input(this.active, '\x1b[200~' + block + '\x1b[201~');
       const s = this.sessions.find((x) => x.id === this.active); if (s) s.xterm.focus();
     };
     if (wasHidden) setTimeout(write, 300); else write();
   },
-  // 点终端里的文件名/路径 → 结合 cwd + 搜索定位真实文件，在翻箱里打开
+  // 用户输入统一入口：记 lastInput 供回显过滤（击键/粘贴/拖路径/跟随 cd 引发的重绘不算 agent 干活）
+  input(id, d) {
+    const s = this.sessions.find((x) => x.id === id);
+    if (s) {
+      s.lastInput = Date.now();
+      // 回车多半提交了条命令（cd 这类被回显过滤、不走 busy 周期），稍后把标题对齐真实目录
+      if (d.indexOf('\r') !== -1) { clearTimeout(s._cwdT); s._cwdT = setTimeout(() => this.refreshCwd(s, true), 800); }
+    }
+    window.fanboxPty.input(id, d);
+  },
+  // 点终端里的文件名/路径 → 结合 cwd + 回扫 scrollback + 搜索定位真实文件，在翻箱里打开
   // tail：路径在该逻辑行里的后续文本，服务端用它做「空格扩展」stat 验证（带空格的文件名靠它补全）
-  async openTermPath(id, raw, tail) {
+  // rowHint：点击处逻辑行的末物理行号（buffer 绝对行），回扫 scrollback 的起点
+  async openTermPath(id, raw, tail, rowHint) {
     let p = String(raw).replace(/^['"]+/, '').replace(/[)\]'"`,:;]+$/, '');
     let cwd = state.cwd;
     let candidate = p;
-    if (!p.startsWith('/') && !p.startsWith('~')) {
+    const isRel = !p.startsWith('/') && !p.startsWith('~');
+    if (isRel) {
       try { const r = await window.fanboxPty.cwd(id); if (r && r.ok && r.cwd) cwd = r.cwd; } catch { /* */ }
       candidate = (cwd || '').replace(/\/$/, '') + '/' + p.replace(/^\.\//, '');
     }
     const name = p.split('/').pop();
+    // 回扫 scrollback：agent 生成文件时几乎总打印过全路径（裸文件名常常不在 cwd 下），比模糊搜索可信
+    const alt = isRel ? this.scanScrollbackFor(id, name, rowHint) : '';
+    // 活跃项目根（浏览目录 + 各终端项目目录）作 basename 搜索的额外根
+    const roots = [];
+    if (state.cwd) roots.push(state.cwd);
+    this.sessions.forEach((x) => { const d = x.cwd || x.startDir; if (d && !roots.includes(d)) roots.push(d); });
     const q = encodeURIComponent;
-    const r = await api(`/api/locate?path=${q(candidate)}&name=${q(name)}&root=${q(cwd || state.home)}&tail=${q(tail || '')}`);
+    const r = await api(`/api/locate?path=${q(candidate)}&name=${q(name)}&root=${q(cwd || state.home)}&tail=${q(tail || '')}&alt=${q(alt)}&roots=${q(roots.join('\n'))}`);
     if (!r.found) { toast('没找到「' + name + '」', true); return; }
     if (r.isDir) { navigate(r.path); toast('已跳到该目录'); return; }
     await navigate(dirOf(r.path));
     const e = state.entries.find((x) => x.path === r.path) || { path: r.path, name: baseOf(r.path), kind: 'text', isDir: false };
     applySelection(r.path); openPreview(e); recordRecent(r.path);
-    toast(r.viaSearch ? '未精确命中，已打开最接近的「' + baseOf(r.path) + '」' : '已打开');
+    toast(r.viaSearch ? '未精确命中，已打开最接近的「' + baseOf(r.path) + '」' : (r.viaScrollback ? '已按会话里出现过的路径打开' : '已打开'));
+  },
+  // 从 fromRow 往上回扫 scrollback（最多 2000 物理行），收集含该 basename 的绝对路径（/ 或 ~ 开头，
+  // 最近出现在前，≤3 个），交给 /api/locate 逐个 stat 验证。折行沿 isWrapped 拼回逻辑行；
+  // 含 … 的截断路径、URL（// 开头或紧跟冒号）跳过，继续往上找干净的
+  scanScrollbackFor(id, name, fromRow) {
+    const s = this.sessions.find((x) => x.id === id);
+    if (!s || !name) return '';
+    const buf = s.xterm.buffer.active;
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp('(?:~|/)(?:[^\\s\'"`()]*/)?' + esc + '(?=$|[\\s\'"`)\\],:;。，）】])', 'gu');
+    const hits = [];
+    let row = Math.min(fromRow == null ? buf.length - 1 : fromRow, buf.length - 1);
+    let budget = 2000;
+    while (row >= 0 && budget > 0 && hits.length < 3) {
+      let start = row;
+      while (start > 0 && buf.getLine(start) && buf.getLine(start).isWrapped) start--;
+      budget -= row - start + 1;
+      let text = '';
+      for (let i = start; i <= row; i++) {
+        const ln = buf.getLine(i);
+        if (ln) text += ln.translateToString(i === row); // 折行中段保持整行宽（不 trim），仅末行 trim
+      }
+      if (text.includes(name)) {
+        re.lastIndex = 0;
+        let m;
+        while ((m = re.exec(text)) !== null) { // 行内多候选：跳过被护栏否决的，继续找同行更干净的
+          const cand = m[0];
+          if (cand && !cand.includes('…') && !cand.startsWith('//') && text[m.index - 1] !== ':' && !hits.includes(cand)) { hits.push(cand); break; }
+        }
+      }
+      row = start - 1;
+    }
+    return hits.join('\n');
   },
   // 终端跟随浏览：把活动终端 cd 到指定目录
   syncCd(dir) {
     if (!this.active || !dir) return;
-    window.fanboxPty.input(this.active, 'cd ' + shQuote(dir) + '\r');
+    this.input(this.active, 'cd ' + shQuote(dir) + '\r');
   },
   setFollow(on) {
     this.followBrowse = on;
@@ -1872,12 +1940,32 @@ const term = {
     if (r && r.ok && r.cwd) navigate(r.cwd);
     else toast('取终端目录失败', true);
   },
+  // 项目身份色：路径稳定哈希到色相——同一项目的标签色点永远一个色，扫一眼即配对
+  hueOf(p) { let h = 0; for (let i = 0; i < (p || '').length; i++) h = (h * 31 + p.charCodeAt(i)) >>> 0; return h % 360; },
+  // 标签标题跟着终端「现在」的目录走（lsof 查真实 cwd），不再停留在创建时的快照；
+  // 多标签跑不同项目的 agent 时，标题才认得出谁是谁
+  async refreshCwd(s, force) {
+    if (!s || s.dead) return;
+    const now = Date.now();
+    // 轻节流：避免每 3-5 秒打一条日志的后台会话（dev server）在 busy→idle 间无限循环里反复 spawn lsof。
+    // cd / 用户主动场景传 force 跳过节流，标题立刻对齐
+    if (!force && now - (s._cwdAt || 0) < 4000) return;
+    s._cwdAt = now;
+    try {
+      const r = await window.fanboxPty.cwd(s.id);
+      if (r && r.ok && r.cwd && r.cwd !== s.cwd) {
+        s.cwd = r.cwd; s.title = baseOf(r.cwd) || s.title;
+        this.renderTabs(); renderBreadcrumb(); // 面包屑的项目配对色点也跟着换
+      }
+    } catch { /* 取不到就保持原标题 */ }
+  },
   async newTab(cwdOverride) {
     const startDir = cwdOverride || state.cwd;
     const id = 't' + (++this.seq);
     const host = document.createElement('div');
     host.className = 'xterm-instance';
     $('#xterm-host').appendChild(host);
+    host.classList.add('show'); // 先可见再 open/fit：display:none 下 fit 量不出尺寸，PTY 会以 80 列出生
     const FitCtor = window.FitAddon ? (window.FitAddon.FitAddon || window.FitAddon) : null;
     const xterm = new window.Terminal({
       fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'monospace',
@@ -1894,6 +1982,21 @@ const term = {
       try { const U = window.Unicode11Addon.Unicode11Addon || window.Unicode11Addon; xterm.loadAddon(new U()); xterm.unicode.activeVersion = '11'; } catch { /* */ }
     }
     xterm.open(host);
+    // 滚动失同步自愈：DOM 滚动条已到底但 buffer 没到底，是 5.5.0 旧 Viewport 的 bug 签名
+    //（正常跟随输出时两者同步在底、用户上翻时 DOM 不在底，都不会触发），重算滚动区并到底
+    const vpEl = host.querySelector('.xterm-viewport');
+    if (vpEl) host.addEventListener('wheel', (ev) => {
+      if (ev.deltaY <= 0) return; // 只管「向下滚卡住」
+      requestAnimationFrame(() => { try {
+        const b = xterm.buffer.active;
+        if (b.type !== 'normal') return; // vim/htop 的 alt-screen 没有滚动条语义
+        const atDomBottom = vpEl.scrollTop + vpEl.clientHeight >= vpEl.scrollHeight - 2;
+        if (atDomBottom && b.viewportY < b.baseY) {
+          xterm._core.viewport?.syncScrollArea?.(true);
+          xterm.scrollToBottom();
+        }
+      } catch { /* 滚动中关标签：xterm 已 dispose，忽略 */ } });
+    }, { passive: true });
     // WebGL 渲染加速（大输出/TUI 不掉帧），失败或上下文丢失回退 DOM
     if (!window.__noWebgl && window.WebglAddon) {
       try {
@@ -1909,12 +2012,14 @@ const term = {
     this.activate(id);
     updateWatches(); // 新终端的项目目录也纳入监听
     const r = await window.fanboxPty.spawn({ id, cwd: startDir, cols: xterm.cols, rows: xterm.rows });
-    if (!r.ok) { xterm.write('\r\n  \x1b[31m终端启动失败：' + (r.error || '') + '\x1b[0m\r\n'); }
+    if (!r.ok) { sess.dead = true; xterm.write('\r\n  \x1b[31m终端启动失败：' + (r.error || '') + '\x1b[0m\r\n'); }
+    else sess.cwd = r.cwd || startDir; // 末尾 renderTabs 统一带上 cwd 重画
     xterm.onData((d) => {
       if (sess.dead) { if (d === '\r' || d === '\n') this.respawn(sess); return; } // 进程退出后回车真重开
-      window.fanboxPty.input(id, d);
+      this.input(id, d);
     });
-    xterm.onResize(({ cols, rows }) => window.fanboxPty.resize(id, cols, rows));
+    xterm.onResize(({ cols, rows }) => { sess.lastInput = Date.now(); window.fanboxPty.resize(id, cols, rows); }); // resize 引发的 TUI 重绘不算 agent 干活
+    window.fanboxPty.resize(id, xterm.cols, xterm.rows); // spawn 等待期间 fit 过的 resize 事件无人监听会丢：补发一次对齐 PTY
     // 识别终端输出里的文件路径 → hover 高亮 + 点击在翻箱打开
     // 三层匹配：引号串（边界最可靠，文件名可含空格）> 斜杠路径 > 带已知扩展名的裸文件名；
     // 长路径折行用逐 cell 拼回逻辑行（CJK 宽字符占两列，下标→坐标必须按 cell 算才不偏移）
@@ -1951,7 +2056,7 @@ const term = {
               range: { start: { x: a.x, y: a.y }, end: { x: b.x + b.w - 1, y: b.y } },
               text: cand,
               decorations: { pointerCursor: true, underline: true },
-              activate: () => this.openTermPath(id, cand, tail),
+              activate: () => this.openTermPath(id, cand, tail, endRow),
             });
           };
           let m;
@@ -1985,12 +2090,14 @@ const term = {
       });
     }
     this.renderTabs();
+    return sess;
   },
   async respawn(sess) {
     sess.dead = false;
     sess.xterm.reset(); // 清掉死亡残留，新 shell 提示符不和旧画面叠在一起
     const r = await window.fanboxPty.spawn({ id: sess.id, cwd: sess.startDir || state.cwd, cols: sess.xterm.cols, rows: sess.xterm.rows });
     if (!r.ok) { sess.dead = true; sess.xterm.write('\x1b[31m重开失败：' + (r.error || '') + '\x1b[0m\r\n'); }
+    else sess.cwd = r.cwd || sess.startDir;
   },
   activate(id) {
     this.active = id;
@@ -1999,7 +2106,15 @@ const term = {
     if (cur) cur.unread = false; // 切到该标签即清未读
     this.renderTabs();
     const s = this.sessions.find((x) => x.id === id);
-    if (s) { this.fitActive(); setTimeout(() => s.xterm.focus(), 0); }
+    if (s) {
+      this.fitActive();
+      // xterm 5.5.0 旧 Viewport 在 display:none 期间会把滚动区高度算矮一屏（上游 #5339，6.0 重写才修）；
+      // 重新可见后强制同步一次，否则滚轮到不了底部。升级 xterm 6.0 后删掉这行
+      requestAnimationFrame(() => { try { s.xterm._core.viewport?.syncScrollArea?.(true); } catch { /* */ } });
+      setTimeout(() => s.xterm.focus(), 0);
+      // 延迟刷新标题（避开双击窗口：双击的第二下若撞上 renderTabs 重建会丢 dblclick 事件）
+      setTimeout(() => this.refreshCwd(s), 600);
+    }
   },
   closeTab(id) {
     const i = this.sessions.findIndex((x) => x.id === id);
@@ -2019,14 +2134,28 @@ const term = {
     if (!s || !s.fit) return;
     requestAnimationFrame(() => { try { s.fit.fit(); } catch { /* */ } });
   },
-  // agent 态势感知：终端有输出→busy；静默 >1.2s→idle；进程退出→dead。
+  // agent 态势感知：终端有输出→busy；静默 >2.5s→idle；进程退出→dead。
   // 非活动标签产生输出标记未读小点；长任务（busy>4s）完成且窗口失焦/非当前标签时发系统通知。
   markBusy(s) {
-    s.lastData = Date.now();
-    if (s.status !== 'busy') { s.status = 'busy'; s.busyStart = s.lastData; this.renderTabs(); }
+    const now = Date.now();
+    $('#terminal-panel').classList.remove('term-awaiting'); // 又有动静了，撤掉「轮到你」呼吸
+    // 回显过滤：距上次用户输入 <400ms 的输出多半是回显/TUI 重绘，不算 agent 自主干活：
+    // 不进入 busy、不推 busyStart；已在 busy 则只续命（agent 干活时排队打字不打断）。
+    // 续命只刷新 lastData（推迟评估时机），不刷新 lastReal（任务时长只数自发输出，打字不算工时）
+    if (now - (s.lastInput || 0) < 400) { if (s.status === 'busy') s.lastData = now; return; }
+    s.lastData = now; s.lastReal = now;
+    if (s.status !== 'busy') { s.status = 'busy'; s.busyStart = now; this.renderTabs(); }
     if (s.id !== this.active) { if (!s.unread) { s.unread = true; this.renderTabs(); } }
-    $('#terminal-panel').classList.remove('term-awaiting'); // 又有输出了，撤掉「轮到你」呼吸
     this.ensureStatusTick();
+  },
+  // 取缓冲区末尾 n 行纯文本：确认对话框和忙碌页脚都画在底部
+  tailText(s, n = 25) {
+    try {
+      const buf = s.xterm.buffer.active;
+      let t = '';
+      for (let i = Math.max(0, buf.length - n); i < buf.length; i++) { const ln = buf.getLine(i); if (ln) t += ln.translateToString(true) + '\n'; }
+      return t;
+    } catch { return ''; }
   },
   // 轮到你了：终端边缘呼吸几秒，余光可感（agent 干完一段、把球踢回给你）
   awaitGlow() {
@@ -2041,18 +2170,25 @@ const term = {
     this._statusTimer = setInterval(() => {
       const now = Date.now(); let anyBusy = false;
       this.sessions.forEach((s) => {
-        if (s.status === 'busy') {
-          if (now - (s.lastData || 0) > 1200) {
-            const dur = (s.lastData || 0) - (s.busyStart || 0);
-            s.status = 'idle';
-            this.renderTabs();
-            if (dur > 1500) this.awaitGlow(); // 非琐碎回显才提示「轮到你」
-            if (dur > 4000) { // 跑了一会儿的真任务完成：文件区涟漪 + 极轻提示音 + 必要时系统通知
-              rippleFileArea();
-              playChime('done');
-              if (!document.hasFocus() || s.id !== this.active) this.notify(s, 'agent 任务完成', (s.title || 'shell') + ' 已空闲');
-            }
-          } else anyBusy = true;
+        if (s.status !== 'busy') return;
+        const quiet = now - (s.lastData || 0);
+        if (quiet <= 2500) { anyBusy = true; return; } // claude/codex 忙碌心跳约 1s 一帧，容差太紧会闪断误报
+        const tail = this.tailText(s);
+        // 假静默护栏：页脚仍挂着「esc to interrupt」说明 agent 还在跑（失焦降频/网络卡顿），30s 内不判收工
+        if (quiet < 30000 && /esc to interrupt/i.test(tail)) { anyBusy = true; return; }
+        const dur = (s.lastReal || 0) - (s.busyStart || 0); // 工时只数自发输出：回显续命不算，免得打字把琐碎回显养肥成「真任务」
+        s.status = 'idle';
+        this.renderTabs();
+        this.refreshCwd(s); // 干完一段活，标题对齐终端真实目录
+        const ask = dur > 600 && TERM_ASK_RE.test(tail); // 停在审批/确认界面：等你拍板（不设 4s 门槛，审批常来得很快）
+        if (ask || dur > 1500) this.awaitGlow();
+        if (ask) {
+          playChime('ask'); // 非 done → 单音，和「完成」的双音区分开
+          if (!document.hasFocus() || s.id !== this.active) this.notify(s, '等待你确认', (s.title || 'shell') + ' 在等你拍板');
+        } else if (dur > 4000) { // 跑了一会儿的真任务完成：文件区涟漪 + 极轻提示音 + 必要时系统通知
+          rippleFileArea();
+          playChime('done');
+          if (!document.hasFocus() || s.id !== this.active) this.notify(s, 'agent 任务完成', (s.title || 'shell') + ' 已空闲');
         }
       });
       if (!anyBusy) { clearInterval(this._statusTimer); this._statusTimer = null; }
@@ -2073,8 +2209,12 @@ const term = {
       const dotState = s.dead ? 'dead' : (s.status === 'busy' ? 'busy' : 'idle');
       t.className = 'term-tab' + (s.id === this.active ? ' active' : '') + (s.unread ? ' unread' : '');
       const dotTitle = s.dead ? '进程已退出' : (s.status === 'busy' ? 'agent 运行中' : '空闲');
-      t.innerHTML = `<span class="tab-dot ${dotState}" title="${dotTitle}"></span>${ic('term', 'currentColor', 12)}<span>${escapeHtml(s.title)}</span><span class="tab-x" title="关闭">✕</span>`;
+      // 终端图标按项目路径染色：同项目同色，和面包屑的配对色点呼应
+      const hue = this.hueOf(s.cwd || s.startDir);
+      t.title = '双击：文件区跳到该终端所在目录';
+      t.innerHTML = `<span class="tab-dot ${dotState}" title="${dotTitle}"></span>${ic('term', `hsl(${hue} 62% 48%)`, 12)}<span>${escapeHtml(s.title)}</span><span class="tab-x" title="关闭">✕</span>`;
       t.onclick = (e) => { if (e.target.classList.contains('tab-x')) { this.closeTab(s.id); return; } this.activate(s.id); };
+      t.ondblclick = (e) => { if (e.target.classList.contains('tab-x')) return; this.locateCwd(); };
       bar.appendChild(t);
     });
   },
