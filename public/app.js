@@ -431,6 +431,9 @@ function bindItem(el, e) {
   el.addEventListener('dragstart', (ev) => {
     ev.dataTransfer.setData('text/plain', e.path);
     ev.dataTransfer.setData('application/x-fanbox-path', e.path);
+    // 拖图片进 md 编辑器：插入原文件路径引用。不带这条时浏览器默认抓的是卡片缩略图的
+    // /api/thumb?w=160 链接，低清且写进文档发出去就裂
+    if (e.kind === 'image') ev.dataTransfer.setData('text/html', `<img src="${escapeHtml(encodeURI(e.path))}" alt="${escapeHtml(e.name)}">`);
     ev.dataTransfer.effectAllowed = 'copy';
   });
   el.onclick = (ev) => {
@@ -2386,6 +2389,24 @@ async function init() {
   bindSidebarResizer();
   bindSelectionToTerminal();
   enableTooltips();
+  // md 里直接引用本地文件路径的图片，按页面 URL 解析必 404：加载失败时解析成
+  // 绝对路径走 /fs/ 镜像端点兜底显示。文档源码保持干净的文件路径，预览和 Crepe 里都能看图
+  $('#preview-body').addEventListener('error', (ev) => {
+    const img = ev.target;
+    if (!(img instanceof HTMLImageElement) || img.dataset.fsTried) return;
+    const src = decodeURI(img.getAttribute('src') || '');
+    if (/^(https?:|data:|blob:)/.test(src) || src.startsWith('/api/') || src.startsWith('/fs/')) return;
+    let abs = src;
+    if (!abs.startsWith('/')) {
+      const stack = (state.selected || '').split('/').slice(0, -1);
+      for (const seg of abs.split('/')) {
+        if (seg === '..') stack.pop(); else if (seg && seg !== '.') stack.push(seg);
+      }
+      abs = '/' + stack.filter(Boolean).join('/');
+    }
+    img.dataset.fsTried = '1';
+    img.src = '/fs' + encodeURI(abs);
+  }, true);
   document.querySelectorAll('#theme-switch .theme-seg button').forEach((b) => { b.onclick = () => applyTheme(b.dataset.skin); });
   await loadRoots();
   await loadFavorites();
