@@ -833,6 +833,9 @@ kbd {
 .desktop .brand .logo, .desktop .brand-name, .desktop .brand-sub { -webkit-app-region: no-drag; }
 /* 顶栏空白处也可拖窗，但其中的按钮/面包屑保持可点 */
 .desktop #topbar { -webkit-app-region: drag; }
+/* 按住侧栏空白也能拖动窗口（#6）；一切可交互元素豁免 */
+.desktop #sidebar { -webkit-app-region: drag; }
+.desktop #sidebar :is(button, input, a, li, kbd, .side-link, #usage-toggle, #usage-body, .tree-kids) { -webkit-app-region: no-drag; }
 .desktop #topbar button, .desktop #topbar .breadcrumb, .desktop #topbar .seg, .desktop #topbar .toggle, .desktop #topbar input { -webkit-app-region: no-drag; }
 
 /* 终端头：跟随/定位 文字按钮 */

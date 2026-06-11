@@ -1909,16 +1909,20 @@ function bindEvents() {
   // 全局兜底：文件拖到窗口其它区域松手时，阻止 Electron 导航到 file:// 顶掉整个界面
   window.addEventListener('dragover', (e) => e.preventDefault());
   window.addEventListener('drop', (e) => e.preventDefault());
-  // 文件区空白处双击 → 新建菜单（原顶部筛选行已移除，新建入口收进这里）
-  $('#file-area').addEventListener('dblclick', (e) => {
-    if (e.target.closest('.item')) return; // 条目自身的双击是「打开」，不抢
+  // 文件区空白处双击/右键 → 新建菜单（#7：右键空白是更普遍的肌肉记忆）
+  const blankMenu = (e) => {
+    if (e.target.closest('.item') || e.target.closest('.row')) return; // 条目自身的菜单不抢
+    e.preventDefault();
     popupMenu(e, [
       { label: '新建文件夹…', fn: () => doCreate('dir') },
       { label: '新建文件…', fn: () => doCreate('file') },
       { sep: true },
       { label: '磁盘占用透视', fn: () => diskPanel(state.cwd) },
     ]);
-  });
+  };
+  $('#file-area').addEventListener('dblclick', blankMenu);
+  $('#file-area').addEventListener('contextmenu', blankMenu);
+  $('#content').addEventListener('contextmenu', (e) => { if (!e.target.closest('#file-area')) blankMenu(e); });
   document.addEventListener('click', (e) => { if (!e.target.closest('#context-menu')) closeContextMenu(); });
   window.addEventListener('blur', closeContextMenu);
   $('#scope-toggle').onclick = () => cmdk.toggleScope();
