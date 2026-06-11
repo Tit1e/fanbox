@@ -11,6 +11,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- 完成提醒误报：agent 只是阶段性收工、底部还挂着后台任务（「1 shell, 1 monitor still running」等）时，不再弹「任务完成」通知和提示音——圆点照常变空闲，等后台任务跑完、agent 真正收工再报
+
 ## [1.7.0] - 2026-06-11
 
 ### Added
