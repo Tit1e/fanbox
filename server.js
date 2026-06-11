@@ -912,27 +912,51 @@ async function createEntry(parentPath, name, type) {
 // → scrollback 回扫候选（alt）逐个 stat → 多根 basename 搜索。
 // 空格扩展：前端对带空格的文件名（macOS 截屏等）只能保守匹配到第一个空格，真实边界
 // 由文件系统验证——把行尾余文按空格边界逐段拼回路径，哪个候选 stat 命中就是哪个
+// 直接 stat + 行尾余文空格扩展（macOS 截屏名「截屏2026-06-10 15.37.43.png」靠这步补全）。
+// locatePath 的前半段；也单独服务终端划线前的显示时验证
+async function statWithTail(p, tail) {
+  const tryStat = async (cand) => {
+    try { const real = resolvePath(cand); const st = await fsp.stat(real); return { found: true, path: real, isDir: st.isDirectory() }; }
+    catch { return null; }
+  };
+  if (!p) return null;
+  const direct = await tryStat(p);
+  if (direct) return direct;
+  if (tail) {
+    const t = String(tail).slice(0, 160).split(/['"`]/)[0];
+    const cands = [];
+    const re = /\s+/g; let m;
+    while ((m = re.exec(t)) !== null && cands.length < 6) { if (m.index > 0) cands.push(p + t.slice(0, m.index)); }
+    if (t.trim() && cands.length < 6) cands.push(p + t.replace(/\s+$/, ''));
+    cands.sort((a, b) => b.length - a.length); // 长优先：偏向完整文件名
+    for (const c of cands) {
+      const hit = await tryStat(c.replace(/[)\]'"`,.:;。，]+$/, ''));
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
+
+// 终端划线前的批量验证：候选路径 stat 得到才配下划线，中文散文里的「分发/产品演示」不再误标
+async function termVerify(b) {
+  const cwd = b.cwd ? resolvePath(b.cwd) : HOME;
+  const items = Array.isArray(b.items) ? b.items.slice(0, 24) : [];
+  const results = await Promise.all(items.map(async (it) => {
+    if (!it || typeof it.cand !== 'string') return false;
+    let p = it.cand;
+    if (!p.startsWith('/') && !p.startsWith('~')) p = cwd.replace(/\/$/, '') + '/' + p.replace(/^\.\//, '');
+    return !!(await statWithTail(p, it.tail || ''));
+  }));
+  return { ok: true, results };
+}
+
 async function locatePath(p, name, root, tail, alt, roots) {
   const tryStat = async (cand) => {
     try { const real = resolvePath(cand); const st = await fsp.stat(real); return { found: true, path: real, isDir: st.isDirectory() }; }
     catch { return null; }
   };
-  if (p) {
-    const direct = await tryStat(p);
-    if (direct) return direct;
-    if (tail) {
-      const t = String(tail).slice(0, 160).split(/['"`]/)[0];
-      const cands = [];
-      const re = /\s+/g; let m;
-      while ((m = re.exec(t)) !== null && cands.length < 6) { if (m.index > 0) cands.push(p + t.slice(0, m.index)); }
-      if (t.trim() && cands.length < 6) cands.push(p + t.replace(/\s+$/, ''));
-      cands.sort((a, b) => b.length - a.length); // 长优先：偏向完整文件名
-      for (const c of cands) {
-        const hit = await tryStat(c.replace(/[)\]'"`,.:;。，]+$/, ''));
-        if (hit) return hit;
-      }
-    }
-  }
+  const direct = await statWithTail(p, tail);
+  if (direct) return direct;
   // scrollback 回扫候选（最近出现在前）：stat 验证，命中即信——它来自 agent 自己打印的全路径
   for (const a of String(alt || '').split('\n').filter(Boolean).slice(0, 3)) {
     const hit = await tryStat(a);
@@ -1849,6 +1873,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/recent') {
       return sendJSON(res, 200, await recentFiles(qp.get('root') || HOME));
+    }
+    if (p === '/api/term-verify' && req.method === 'POST') {
+      return sendJSON(res, 200, await termVerify(await readBody(req)));
     }
     if (p === '/api/locate') {
       const extraRoots = String(qp.get('roots') || '').split('\n').filter(Boolean).slice(0, 3);

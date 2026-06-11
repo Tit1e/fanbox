@@ -2411,7 +2411,7 @@ const term = {
           const t = text.replace(/\s+$/, '');
           const links = []; const found = [];
           const overlaps = (s, e) => found.some((f) => s < f.e && e > f.s);
-          const push = (s, e, cand, tail) => {
+          const push = (s, e, cand, tail, act) => {
             if (e - s < 3 || overlaps(s, e)) return;
             const a = pos[s], b = pos[e - 1];
             if (!a || !b) return;
@@ -2420,10 +2420,16 @@ const term = {
               range: { start: { x: a.x, y: a.y }, end: { x: b.x + b.w - 1, y: b.y } },
               text: cand,
               decorations: { pointerCursor: true, underline: true },
-              activate: () => this.openTermPath(id, cand, tail, endRow),
+              activate: act || (() => this.openTermPath(id, cand, tail, endRow)),
             });
           };
           let m;
+          // 0. URL：直接系统浏览器打开（Electron 的 windowOpenHandler 会转 shell.openExternal）
+          const reU = /\bhttps?:\/\/[^\s'"`<>）（【】「」]+/g;
+          while ((m = reU.exec(t)) !== null) {
+            const url = m[0].replace(/[)\],.:;。，？！?!）】>]+$/, '');
+            push(m.index, m.index + url.length, url, '', () => window.open(url));
+          }
           // 1. 引号串：拖拽插入/agent 输出常用 '…' 包路径，内容像路径或文件名就整体认
           const reQ = /'([^']{3,})'|"([^"]{3,})"/g;
           while ((m = reQ.exec(t)) !== null) {
@@ -2431,25 +2437,46 @@ const term = {
             if (!inner.includes('/') && !/\.[A-Za-z0-9]{1,8}$/.test(inner)) continue;
             push(m.index + 1, m.index + 1 + inner.length, inner, '');
           }
-          // 2. 斜杠路径：高亮保守断在空格；点击时把行尾余文交给服务端做空格扩展 stat 验证
-          //（macOS 截屏「截屏2026-06-10 15.37.43.png」这类带空格文件名靠这步补全）
+          // 2. 斜杠路径：候选先送服务端 stat 验证（含行尾空格扩展），验证得到才配下划线——
+          // 否则中文散文里的「分发/产品演示——……」整句都会被误标成可点路径
           const reP = /(?<![\w:/.~\-])(?:~|\.{1,2})?\/[^\s'"`:()]+/gu;
+          const r2 = [];
           while ((m = reP.exec(t)) !== null) {
             const raw = m[0].replace(/[)\],.:;。，]+$/, '');
-            if (raw.length < 3) continue;
+            if (raw.length < 3 || overlaps(m.index, m.index + raw.length)) continue;
             const tail = t.slice(m.index + raw.length).split(/['"`]/)[0].slice(0, 160);
-            push(m.index, m.index + raw.length, raw, tail);
+            r2.push({ s: m.index, e: m.index + raw.length, cand: raw, tail });
           }
-          // 3. 裸文件名：unicode 字符类（调研.md 能点）+ 扩展名白名单（e.g/node.js 不误报）。
-          // 紧跟斜杠路径、只隔空格的裸名多半是同一带空格路径的后半段：点哪段都按完整串定位
-          //（真分离的如 ls /tmp foo.md，完整串 stat 不中会回落到 basename 搜索，不会开错）
-          while ((m = TERM_LINK_RE_BARE.exec(t)) !== null) {
-            const end = m.index + m[0].length;
-            const prev = found.find((f) => f.tail && f.e <= m.index && /^\s+$/.test(t.slice(f.e, m.index)));
-            if (prev) push(m.index, end, t.slice(prev.s, end), t.slice(end).split(/['"`]/)[0].slice(0, 160));
-            else push(m.index, end, m[0], '');
-          }
-          cb(links.length ? links : undefined);
+          const finish = () => {
+            // 3. 裸文件名：unicode 字符类（调研.md 能点）+ 扩展名白名单（e.g/node.js 不误报）。
+            // 紧跟斜杠路径、只隔空格的裸名多半是同一带空格路径的后半段：点哪段都按完整串定位
+            //（真分离的如 ls /tmp foo.md，完整串 stat 不中会回落到 basename 搜索，不会开错）
+            TERM_LINK_RE_BARE.lastIndex = 0;
+            let mm;
+            while ((mm = TERM_LINK_RE_BARE.exec(t)) !== null) {
+              const end = mm.index + mm[0].length;
+              const prev = found.find((f) => f.tail && f.e <= mm.index && /^\s+$/.test(t.slice(f.e, mm.index)));
+              if (prev) push(mm.index, end, t.slice(prev.s, end), t.slice(end).split(/['"`]/)[0].slice(0, 160));
+              else push(mm.index, end, mm[0], '');
+            }
+            cb(links.length ? links : undefined);
+          };
+          if (!r2.length) { finish(); return; }
+          const sess0 = this.sessions.find((x) => x.id === id);
+          const cwd0 = (sess0 && (sess0.cwd || sess0.startDir)) || state.cwd || '';
+          // 验证结果按 (cwd, cand, tail) 缓存：provideLinks 在鼠标移动时反复触发，别反复打接口
+          this._vCache = this._vCache || new Map();
+          const need = r2.filter((x) => !this._vCache.has(cwd0 + ' ' + x.cand + ' ' + x.tail));
+          const apply = () => {
+            r2.forEach((x) => { if (this._vCache.get(cwd0 + ' ' + x.cand + ' ' + x.tail)) push(x.s, x.e, x.cand, x.tail); });
+            finish();
+          };
+          if (!need.length) { apply(); return; }
+          apiPost('/api/term-verify', { cwd: cwd0, items: need.map((x) => ({ cand: x.cand, tail: x.tail })) }).then((res) => {
+            need.forEach((x, i) => this._vCache.set(cwd0 + ' ' + x.cand + ' ' + x.tail, !!(res.results && res.results[i])));
+            if (this._vCache.size > 600) { for (const k of this._vCache.keys()) { this._vCache.delete(k); if (this._vCache.size <= 400) break; } }
+            apply();
+          }).catch(() => finish()); // 验证不可用：宁可不划线，不要误标
         },
       });
     }
