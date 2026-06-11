@@ -1642,6 +1642,15 @@ function bindTerminalResizer() {
 
 // ---------- 事件绑定 ----------
 function bindEvents() {
+  // 顶栏窄时分级藏低频控件（观测自身宽度而非视口——侧栏会吃掉一截且可折叠）
+  const tb = $('#topbar');
+  new ResizeObserver((es) => {
+    const w = es[0].contentRect.width;
+    tb.classList.toggle('tb-sm', w < 980);
+    tb.classList.toggle('tb-xs', w < 880);
+    tb.classList.toggle('tb-xxs', w < 790);
+    tb.classList.toggle('tb-min', w < 660);
+  }).observe(tb);
   $('#btn-back').onclick = goBack;
   $('#btn-up').onclick = goUp;
   $('#preview-close').onclick = closePreview;
@@ -2699,9 +2708,7 @@ function recordChange(dir, filename) {
 }
 function renderChangesBadge() {
   const b = $('#changes-badge'); if (!b) return;
-  const n = state.changeLog.length;
-  b.textContent = String(n);
-  b.classList.toggle('hidden', n === 0);
+  b.classList.toggle('hidden', state.changeLog.length === 0);
 }
 function fmtClock(ms) { const d = new Date(ms); const p = (x) => String(x).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; }
 function toggleChangesPanel() {

@@ -217,7 +217,13 @@ kbd {
 /* 项目配对色点：和终端标签的图标同色，扫一眼知道文件区与哪个终端是一伙的 */
 .breadcrumb .crumb-proj { width: 7px; height: 7px; border-radius: 50%; margin-left: 6px; flex: none; align-self: center; }
 
-.topbar-actions { display: flex; align-items: center; gap: 10px; }
+/* 右侧操作区永不收缩变形——挤压压力全部交给面包屑（它能横向滚动） */
+.topbar-actions { display: flex; align-items: center; gap: 10px; flex: none; white-space: nowrap; }
+/* 顶栏越窄越往下藏，低频控件先走，终端按钮永远保住（tb-* 由 ResizeObserver 按顶栏自身宽度打） */
+#topbar.tb-sm #gridsize-seg { display: none; }
+#topbar.tb-xs .toggle { display: none; }
+#topbar.tb-xxs #view-seg, #topbar.tb-xxs #btn-recent { display: none; }
+#topbar.tb-min #sort-seg { display: none; }
 .toggle { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .seg button {
@@ -233,6 +239,12 @@ kbd {
 }
 .ghost-btn svg { flex-shrink: 0; }
 .ghost-btn:hover, .ghost-btn.active { color: var(--text); border-color: var(--accent); }
+/* 终端是核心入口，用强调色突出 */
+#btn-terminal {
+  color: var(--accent); background: var(--accent-soft); font-weight: 700;
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+#btn-terminal:hover, #btn-terminal.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 
 #content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
 #file-area { padding: 12px 16px 40px; }
@@ -703,7 +715,8 @@ kbd {
 @keyframes tabpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 /* 变更收件箱：徽章 + 浮层面板 */
 #btn-changes { position: relative; }
-.changes-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; margin-left: 3px; font-size: 10px; font-weight: 700; border-radius: 8px; background: var(--accent); color: var(--bg); line-height: 1; }
+/* 有变更只亮一个点，不跳数字（数字频繁变化太吵） */
+.changes-badge { display: inline-block; width: 7px; height: 7px; margin-left: 1px; border-radius: 50%; background: var(--accent); }
 .changes-badge.hidden { display: none; }
 .changes-pop { position: fixed; z-index: 200; width: 380px; max-height: 60vh; display: flex; flex-direction: column; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.32); overflow: hidden; }
 .changes-pop .cp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; font-size: 12px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border); }
