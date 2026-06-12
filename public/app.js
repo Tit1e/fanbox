@@ -2522,21 +2522,44 @@ const term = {
         if (ask || dur > 1500) this.awaitGlow();
         if (ask) {
           playChime('ask'); // 非 done → 单音，和「完成」的双音区分开
-          if (!document.hasFocus() || s.id !== this.active) this.notify(s, '等待你确认', (s.title || 'shell') + ' 在等你拍板');
+          if (!document.hasFocus() || s.id !== this.active) this.notify(s, '等待你确认 · ' + (s.title || 'shell'), this.lastReplyExcerpt(s) || (s.title || 'shell') + ' 在等你拍板');
         } else if (dur > 4000) { // 跑了一会儿的真任务完成：文件区涟漪 + 极轻提示音 + 必要时系统通知
           rippleFileArea();
           playChime('done');
-          if (!document.hasFocus() || s.id !== this.active) this.notify(s, 'agent 任务完成', (s.title || 'shell') + ' 已空闲');
+          if (!document.hasFocus() || s.id !== this.active) this.notify(s, 'agent 任务完成 · ' + (s.title || 'shell'), this.lastReplyExcerpt(s) || (s.title || 'shell') + ' 已空闲');
         }
       });
       if (!anyBusy) { clearInterval(this._statusTimer); this._statusTimer = null; }
     }, 600);
   },
+  // 收工时从缓冲区捞 agent 最后说的话，做通知预览：剥掉 TUI 框线/输入框/页脚状态行，留正文
+  lastReplyExcerpt(s, maxLen = 160) {
+    const JUNK = /esc to interrupt|\? for shortcuts|for commands|bypass|auto-accept|accept edits|plan mode|shift\+tab|context left|tokens used|still running|·\s*\d+\s+(shells?|monitors?|tasks?|agents?)\b/i;
+    const lines = [];
+    for (const raw of this.tailText(s, 40).split('\n')) {
+      const t = raw.replace(/^[\s│┃]+|[\s│┃]+$/g, '').replace(/^[⏺●◉>]\s+/, '').trim();
+      if (!t) continue;
+      if (/^[╭╰╮╯├┤─━┄┆┈·•．.…*=_-]+$/.test(t)) continue; // 纯框线/分隔线
+      if (JUNK.test(t)) continue;
+      lines.push(t);
+    }
+    const text = lines.slice(-3).join(' ').replace(/\s+/g, ' ').trim();
+    return text.length > maxLen ? text.slice(0, maxLen) + '…' : text;
+  },
   notify(s, title, body) {
     try {
       if (typeof Notification === 'undefined') return;
-      if (Notification.permission === 'granted') { new Notification(title, { body }); }
-      else if (Notification.permission !== 'denied') { Notification.requestPermission().then((p) => { if (p === 'granted') new Notification(title, { body }); }); }
+      const fire = () => {
+        const n = new Notification(title, { body });
+        // 点通知：app 拉回前台 + 切到对应终端标签——多项目并行时直达要操作的那个环境
+        n.onclick = () => {
+          try { if (window.fanboxWin) window.fanboxWin.focus(); else window.focus(); } catch { /* */ }
+          if (s && this.sessions.includes(s)) { this.open(); this.activate(s.id); }
+          try { n.close(); } catch { /* */ }
+        };
+      };
+      if (Notification.permission === 'granted') fire();
+      else if (Notification.permission !== 'denied') Notification.requestPermission().then((p) => { if (p === 'granted') fire(); });
     } catch { /* 通知不可用就算了 */ }
   },
   renderTabs() {
