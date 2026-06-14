@@ -11,6 +11,19 @@
 
 ## [Unreleased]
 
+## [1.11.1] - 2026-06-14
+
+### Added
+- 内嵌终端字体优先使用系统已装的 **Nerd Font**（JetBrainsMono / MesloLGS / FiraCode / Hack / Symbols Nerd Font），让 Starship、powerline 等主题的图标和箭头正常显示，不再是方块 tofu
+
+### Changed
+- 内嵌终端改用 **login shell** 启动（`zsh -l`），会读取 `~/.zprofile` / `~/.zlogin` 里配的 PATH，解决「普通终端能找到 `claude`、FanBox 内嵌终端却找不到」
+- 删除顶栏「← 后退 / ↑ 上一级」两个按钮：和面包屑导航功能重复，且收起侧栏时与 macOS 红绿灯重叠。后退 / 上一级保留 `⌘[` 和 `Backspace` 快捷键
+- 收起侧栏时顶栏内容右移，给 macOS 红绿灯让位
+
+### Fixed
+- 加固：FanBox 访问自己的 localhost 后端时显式给 loopback 加代理旁路，避免 clash 强制系统代理、企业 PAC 等场景把本地请求拦成 502，导致整个界面白屏
+
 ## [1.11.0] - 2026-06-13
 
 ### Added

@@ -299,7 +299,6 @@ function goUp() { if (state.parent && state.parent !== state.cwd) navigate(state
 function render() {
   renderBreadcrumb();
   renderFiles();
-  $('#btn-back').disabled = !state.history.length;
 }
 function renderBreadcrumb() {
   const bc = $('#breadcrumb');
@@ -2026,8 +2025,7 @@ function bindEvents() {
     tb.classList.toggle('tb-xxs', w < 790);
     tb.classList.toggle('tb-min', w < 660);
   }).observe(tb);
-  $('#btn-back').onclick = goBack;
-  $('#btn-up').onclick = goUp;
+  // ←/↑ 顶栏按钮已删（与面包屑功能重复、且和 macOS 红绿灯冲突）；后退/上一级保留 ⌘[ 和 Backspace 快捷键
   $('#preview-close').onclick = closePreview;
   $('#cmdk-trigger').onclick = () => cmdk.open();
   $('#btn-recent').onclick = showRecent;
@@ -2467,7 +2465,7 @@ const term = {
     host.classList.add('show'); // 先可见再 open/fit：display:none 下 fit 量不出尺寸，PTY 会以 80 列出生
     const FitCtor = window.FitAddon ? (window.FitAddon.FitAddon || window.FitAddon) : null;
     const xterm = new window.Terminal({
-      fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-mono').trim() || 'monospace',
+      fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-term').trim() || 'monospace',
       fontSize: 13, lineHeight: 1.2, cursorBlink: true, theme: this.theme(), scrollback: 5000,
       allowProposedApi: true, // unicode11 宽度 API 需要
       // agent 常输出按深色终端设计的 256 色/真彩（如淡蓝路径），在浅色皮肤上几乎隐形；
@@ -2497,7 +2495,9 @@ const term = {
       } catch { /* 滚动中关标签：xterm 已 dispose，忽略 */ } });
     }, { passive: true });
     // WebGL 渲染加速（大输出/TUI 不掉帧），失败或上下文丢失回退 DOM
-    if (!window.__noWebgl && window.WebglAddon) {
+    // 诊断开关：控制台跑 fbWebgl(false) 关掉 WebGL（用 DOM renderer）排查 CJK 残影乱码，fbWebgl(true) 恢复，需新开标签生效
+    const webglOff = (() => { try { return localStorage.getItem('fanbox.noWebgl') === '1'; } catch { return false; } })();
+    if (!webglOff && !window.__noWebgl && window.WebglAddon) {
       try {
         const Wg = window.WebglAddon.WebglAddon || window.WebglAddon;
         const wg = new Wg();
@@ -3828,4 +3828,8 @@ function bindUpdateNotice() {
   // 主进程启动 6 秒就推送，init 加载大目录时这里可能还没注册监听——补拉一次，错过的推送不丢
   if (window.fanboxUpdate.get) window.fanboxUpdate.get().then((m) => { if (m) show(m); }).catch(() => {});
 }
+
+// 终端渲染器诊断开关：fbWebgl(false) 关 WebGL 用 DOM renderer 排查 CJK 残影，fbWebgl(true) 恢复。改完新开一个终端标签生效
+window.fbWebgl = (on) => { try { if (on) localStorage.removeItem('fanbox.noWebgl'); else localStorage.setItem('fanbox.noWebgl', '1'); } catch {} const off = (() => { try { return localStorage.getItem('fanbox.noWebgl') === '1'; } catch { return false; } })(); console.log('[fanbox] WebGL ' + (off ? '已关闭（DOM renderer）' : '已开启') + '，请新开一个终端标签验证'); return !off; };
+
 init();
