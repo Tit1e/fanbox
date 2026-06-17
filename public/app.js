@@ -277,6 +277,7 @@ async function navigate(p, pushHistory = true) {
     if (data.error) { toast('无法打开：' + data.error, true); return; }
     if (pushHistory && state.cwd) state.history.push(state.cwd);
     state.cwd = data.path;
+    try { window.fanboxWechat && window.fanboxWechat.setCwd(state.cwd); } catch { /* 微信 ClawBot 的 agent 工作目录跟随当前项目 */ }
     state.entries = data.entries;
     state.project = data.project;
     state.breadcrumb = data.breadcrumb;
@@ -2102,100 +2103,182 @@ function bindTerminalResizer() {
   });
 }
 
-// ---------- 微信 ClawBot：扫码把微信接到本机 OpenClaw（→ Claude Code / Codex），点图标看对话 ----------
-const wechatPanel = {
-  ov: null, offQr: null, offConn: null, pollTimer: null, onKey: null,
+// ---------- 微信 ClawBot：终端内的 IM 界面（设计方向 A）。桌面输入直连本机 claude/codex，可选连手机微信遥控 ----------
+const wechatView = {
+  offMsg: null, offQr: null, offConn: null, onKey: null, onDoc: null,
+  target: 'codex', targets: [], connected: false, cwdName: '', menuOpen: false,
+  el() { return $('#wechat-view'); },
+  shown() { const e = this.el(); return e && !e.classList.contains('hidden'); },
+  toggle() { this.shown() ? this.close() : this.open(); },
   async open() {
     if (!window.fanboxWechat) { toast('微信连接需在 FanBox 桌面版使用', true); return; }
-    if (this.ov) return;
-    const ov = document.createElement('div');
-    ov.className = 'input-overlay';
-    ov.innerHTML = `<div class="input-dialog wechat-dialog">
-      <div class="input-title">微信 ClawBot <span class="wx-sub">用微信驱动本机的 Claude Code / Codex</span></div>
-      <div class="wx-body"><div class="wx-loading">检测环境…</div></div>
-      <div class="input-actions"><button class="ghost-btn" data-act="close">关闭</button></div></div>`;
-    document.body.appendChild(ov);
-    this.ov = ov;
-    const close = () => this.close();
-    ov.querySelector('[data-act=close]').onclick = close;
-    ov.onclick = (ev) => { if (ev.target === ov) close(); };
-    this.onKey = (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); close(); } };
+    if (!term.available()) { toast('需要桌面版的内嵌终端', true); return; }
+    if ($('#terminal-panel').classList.contains('hidden')) term.open(); // 这界面活在终端里
+    try { window.fanboxWechat.setCwd(state.cwd); } catch { /* */ }
+    this.renderShell();
+    this.el().classList.remove('hidden');
+    this.onKey = (ev) => {
+      if (ev.key !== 'Escape' || !this.shown()) return;
+      if (this.menuOpen) { ev.preventDefault(); this.closeMenu(); return; }
+      const scan = this.el().querySelector('#wx-scan');
+      if (scan && !scan.classList.contains('hidden')) { ev.preventDefault(); this.teardownScan(); scan.classList.add('hidden'); return; }
+      ev.preventDefault(); this.close();
+    };
     document.addEventListener('keydown', this.onKey, true);
+    this.offMsg = window.fanboxWechat.onMessage(() => this.loadChat());
     await this.detect();
   },
-  body() { return this.ov && this.ov.querySelector('.wx-body'); },
+  close() {
+    this.teardown();
+    if (this.onKey) { document.removeEventListener('keydown', this.onKey, true); this.onKey = null; }
+    if (this.onDoc) { document.removeEventListener('click', this.onDoc, true); this.onDoc = null; }
+    const e = this.el(); if (e) { e.classList.add('hidden'); e.innerHTML = ''; }
+  },
+  teardown() {
+    if (this.offMsg) { this.offMsg(); this.offMsg = null; }
+    this.teardownScan();
+    this.menuOpen = false;
+  },
+  teardownScan() {
+    if (this.offQr) { this.offQr(); this.offQr = null; }
+    if (this.offConn) { this.offConn(); this.offConn = null; }
+    try { window.fanboxWechat && window.fanboxWechat.cancel(); } catch { /* */ }
+  },
+  renderShell() {
+    const e = this.el();
+    e.innerHTML = `<div class="wx-bar">
+        <span class="wx-dot off" id="wx-dot"></span>
+        <span class="wx-name">微信 ClawBot</span>
+        <span class="wx-spacer"></span>
+        <span class="wx-brain" id="wx-brain">连到 Codex <span class="caret">▾</span></span>
+        <button class="wx-x" id="wx-close" title="收起（回到终端）">✕</button>
+        <div class="wx-menu hidden" id="wx-menu"></div>
+      </div>
+      <div class="wx-body">
+        <div class="wx-chat" id="wx-chat"></div>
+        <div class="wx-scan hidden" id="wx-scan"></div>
+        <div class="wx-viewonly">仅查看手机微信与本机大脑的对话记录，回复请在手机微信进行</div>
+      </div>`;
+    e.querySelector('#wx-close').onclick = () => this.close();
+    e.querySelector('#wx-brain').onclick = (ev) => { ev.stopPropagation(); this.toggleMenu(); };
+    this.onDoc = (ev) => { if (this.menuOpen && !ev.target.closest('#wx-menu') && !ev.target.closest('#wx-brain')) this.closeMenu(); };
+    document.addEventListener('click', this.onDoc, true);
+  },
   async detect() {
-    const env = await window.fanboxWechat.env().catch(() => ({ installed: false }));
-    if (!this.body()) return;
-    wechatPanel.syncDot(!!env.connected);
-    if (!env.installed) this.renderNeedInstall();
-    else if (env.connected) this.renderConnected(env);
-    else this.renderScan();
-  },
-  syncDot(on) { const d = $('#wechat-dot'); if (d) d.classList.toggle('hidden', !on); },
-  renderNeedInstall() {
-    const b = this.body(); if (!b) return;
-    b.innerHTML = `<div class="wx-step">
-      <p>还没装 OpenClaw（微信 ClawBot 的本机中转）。在终端跑这条装好后再回来：</p>
-      <pre class="wx-cmd">npm i -g openclaw</pre>
-      <button class="primary" data-act="recheck">装好了，重新检测</button></div>`;
-    b.querySelector('[data-act=recheck]').onclick = () => this.detect();
-  },
-  renderScan() {
-    this.teardownLogin();
-    const b = this.body(); if (!b) return;
-    b.innerHTML = `<div class="wx-scan"><div class="wx-qr"><div class="wx-loading">生成二维码…</div></div>
-      <p class="wx-hint">用手机微信「扫一扫」，在手机上点「连接」。<br>连上后这里会自动显示对话内容。</p></div>`;
-    this.offQr = window.fanboxWechat.onQr((m) => {
-      const qr = this.ov && this.ov.querySelector('.wx-qr'); if (!qr) return;
-      qr.innerHTML = m.dataUrl ? `<img class="wx-qr-img" src="${m.dataUrl}" alt="微信登录二维码">`
-        : `<p class="wx-hint">二维码生成失败，可在手机打开此链接：<br>${escapeHtml(m.url)}</p>`;
-    });
-    this.offConn = window.fanboxWechat.onConnected(async () => {
-      const env = await window.fanboxWechat.env().catch(() => ({ connected: true }));
-      this.renderConnected(env);
-    });
-    window.fanboxWechat.login().then((r) => {
-      if (r && !r.ok) { const qr = this.ov && this.ov.querySelector('.wx-qr'); if (qr) qr.innerHTML = `<p class="wx-hint">${escapeHtml(r.error || '启动登录失败')}</p>`; }
-    });
-  },
-  async renderConnected(env) {
-    this.teardownLogin();
-    this.syncDot(true);
-    const b = this.body(); if (!b) return;
-    const who = (env && env.agentModel) ? env.agentModel : '本机 agent';
-    b.innerHTML = `<div class="wx-conn">
-      <div class="wx-conn-bar"><span class="wx-on">● 已连接</span><span class="wx-who">微信 → ${escapeHtml(who)}</span><button class="ghost-btn wx-sm" data-act="disc">断开</button></div>
-      <div class="wx-chat"><div class="wx-loading">读取对话…</div></div></div>`;
-    b.querySelector('[data-act=disc]').onclick = async () => { await window.fanboxWechat.disconnect(); this.syncDot(false); this.renderScan(); };
+    const env = await window.fanboxWechat.env().catch(() => ({}));
+    this.connected = !!env.connected;
+    this.targets = (env.targets && env.targets.length) ? env.targets : [{ id: 'codex', label: 'Codex', available: true }, { id: 'claude', label: 'Claude Code', available: true }];
+    if (env.target) this.target = env.target;
+    this.cwdName = env.cwdName || '';
+    this.persona = env.persona || '';
+    this.personaDefault = env.personaDefault || '';
+    this.syncBar();
     await this.loadChat();
-    clearInterval(this.pollTimer);
-    this.pollTimer = setInterval(() => this.loadChat(), 4000); // 准实时刷新对话
+  },
+  label(id) { const t = this.targets.find((x) => x.id === id); return t ? t.label : (id === 'claude' ? 'Claude Code' : 'Codex'); },
+  syncBar() {
+    const e = this.el(); if (!e) return;
+    const dot = e.querySelector('#wx-dot'); if (dot) dot.classList.toggle('off', !this.connected);
+    const brain = e.querySelector('#wx-brain'); if (brain) brain.innerHTML = `连到 ${escapeHtml(this.label(this.target))} <span class="caret">${this.menuOpen ? '▴' : '▾'}</span>`;
+    this.syncDot(this.connected);
+  },
+  toggleMenu() { this.menuOpen ? this.closeMenu() : this.openMenu(); },
+  openMenu() {
+    this.menuOpen = true;
+    const e = this.el(); const menu = e.querySelector('#wx-menu');
+    const item = (id) => {
+      const t = this.targets.find((x) => x.id === id) || { available: true };
+      const cur = id === this.target;
+      return `<div class="wx-mi ${cur ? 'cur' : ''}" data-pick="${id}"${t.available ? '' : ' disabled'}>${escapeHtml(this.label(id))}${cur ? '<span class="ck">✓</span>' : ''}</div>`;
+    };
+    menu.innerHTML = item('claude') + item('codex') + `<div class="wx-sep"></div>` +
+      `<div class="wx-mi" data-act="persona">自定义人格…</div>` +
+      (this.connected ? `<div class="wx-mi danger" data-act="disc">断开手机微信</div>` : `<div class="wx-mi" data-act="conn">连接手机微信…</div>`);
+    menu.querySelectorAll('[data-pick]').forEach((b) => { b.onclick = () => this.pickTarget(b.dataset.pick); });
+    const conn = menu.querySelector('[data-act=conn]'); if (conn) conn.onclick = () => { this.closeMenu(); this.connectPhone(); };
+    const disc = menu.querySelector('[data-act=disc]'); if (disc) disc.onclick = () => { this.closeMenu(); this.disconnectPhone(); };
+    const pers = menu.querySelector('[data-act=persona]'); if (pers) pers.onclick = () => { this.closeMenu(); this.editPersona(); };
+    menu.classList.remove('hidden');
+    e.querySelector('#wx-brain').classList.add('open');
+    this.syncBar();
+  },
+  closeMenu() {
+    this.menuOpen = false; const e = this.el(); if (!e) return;
+    const m = e.querySelector('#wx-menu'); if (m) m.classList.add('hidden');
+    const b = e.querySelector('#wx-brain'); if (b) b.classList.remove('open');
+    this.syncBar();
+  },
+  async pickTarget(id) {
+    const t = this.targets.find((x) => x.id === id);
+    if (t && !t.available) { toast(`本机未检测到 ${this.label(id)}`, true); return; }
+    this.target = id; this.closeMenu();
+    await window.fanboxWechat.setTarget(id).catch(() => {});
+    this.syncBar(); this.loadChat();
   },
   async loadChat() {
-    const chat = this.ov && this.ov.querySelector('.wx-chat'); if (!chat) return;
-    const s = await window.fanboxWechat.sessions().catch(() => ({ items: [] }));
-    const sid = s.items && s.items[0] && s.items[0].id;
-    if (!sid) { chat.innerHTML = `<p class="wx-hint">还没有对话。去微信里给「微信ClawBot」发条消息试试。</p>`; return; }
-    const t = await window.fanboxWechat.transcript(sid).catch(() => ({ msgs: [] }));
-    const msgs = t.msgs || [];
-    if (!msgs.length) { chat.innerHTML = `<p class="wx-hint">还没有对话内容。</p>`; return; }
-    const last = msgs[msgs.length - 1];
-    const sig = msgs.length + ':' + (last.text || '').slice(0, 24);
-    if (chat.dataset.sig === sig) return; // 内容没变就不重渲染，别打断滚动
-    const atBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 40;
-    chat.innerHTML = msgs.map((m) => `<div class="wx-msg ${m.role === 'user' ? 'me' : 'bot'}">${escapeHtml(m.text)}</div>`).join('');
-    chat.dataset.sig = sig;
-    if (atBottom) chat.scrollTop = chat.scrollHeight;
+    const e = this.el(); const chat = e && e.querySelector('#wx-chat'); if (!chat) return;
+    const r = await window.fanboxWechat.conversation().catch(() => ({ messages: [] }));
+    const msgs = r.messages || [];
+    if (!msgs.length) {
+      chat.innerHTML = `<div class="wx-empty">还没有对话。<br>点右上「连到 ${escapeHtml(this.label(this.target))} ▾ → 连接手机微信」，<br>用手机微信遥控本机的 <b>${escapeHtml(this.label(this.target))}</b>，对话记录会显示在这里。</div>`;
+      return;
+    }
+    chat.innerHTML = msgs.map((m) => this.bubble(m)).join('');
+    chat.scrollTop = chat.scrollHeight;
   },
-  teardownLogin() { if (this.offQr) { this.offQr(); this.offQr = null; } if (this.offConn) { this.offConn(); this.offConn = null; } },
-  close() {
-    this.teardownLogin();
-    clearInterval(this.pollTimer); this.pollTimer = null;
-    try { window.fanboxWechat && window.fanboxWechat.cancel(); } catch { /* */ }
-    if (this.onKey) { document.removeEventListener('keydown', this.onKey, true); this.onKey = null; }
-    if (this.ov) { this.ov.remove(); this.ov = null; }
+  bubble(m) {
+    const me = m.role === 'user';
+    const av = me ? '花' : (this.target === 'claude' ? 'C' : 'CX');
+    // bot 回复渲染 markdown（手机大脑常回 **加粗**/列表/`代码`）；user 保持纯文本转义
+    const body = me ? escapeHtml(m.text) : this.mdBody(m.text);
+    return `<div class="wx-row ${me ? 'me' : 'bot'}"><div class="wx-av ${me ? 'me' : 'bot'}">${av}</div><div class="wx-bub${me ? '' : ' md'}">${body}</div></div>`;
   },
+  mdBody(text) {
+    try { if (window.marked && !window.__noMarked) return window.marked.parse(String(text || ''), { breaks: true, gfm: true }); } catch { /* 退回纯文本 */ }
+    return escapeHtml(text).replace(/\n/g, '<br>');
+  },
+  connectPhone() {
+    const e = this.el(); const scan = e.querySelector('#wx-scan');
+    scan.innerHTML = `<div class="wx-qr" id="wx-qr"><div class="wx-loading">生成二维码…</div></div>
+      <div class="wx-scan-lead">用手机微信扫一扫</div>
+      <div class="wx-scan-sub">连上后，微信就能遥控本机的 ${escapeHtml(this.label(this.target))} —— 看代码、跑测试、改 bug，回手机上一句话就行。</div>
+      <div class="wx-scan-close" id="wx-scan-close">取消</div>`;
+    scan.classList.remove('hidden');
+    e.querySelector('#wx-scan-close').onclick = () => { this.teardownScan(); scan.classList.add('hidden'); };
+    this.offQr = window.fanboxWechat.onQr((m) => {
+      const qr = this.el() && this.el().querySelector('#wx-qr'); if (!qr) return;
+      if (m.expired) { qr.innerHTML = `<div class="wx-loading">二维码过期，请重试</div>`; return; }
+      qr.innerHTML = m.dataUrl ? `<img src="${m.dataUrl}" alt="二维码">` : `<div class="wx-loading">${escapeHtml(m.content || '二维码生成失败')}</div>`;
+    });
+    this.offConn = window.fanboxWechat.onConnected(async () => { this.teardownScan(); scan.classList.add('hidden'); this.connected = true; await this.detect(); toast('微信已连接'); });
+    window.fanboxWechat.login().then((r) => { if (r && !r.ok) { const qr = this.el() && this.el().querySelector('#wx-qr'); if (qr) qr.innerHTML = `<div class="wx-loading">${escapeHtml(r.error || '登录失败')}</div>`; } });
+  },
+  // 自定义微信 bot 人格：复用 scan 覆盖层做一个编辑面板
+  editPersona() {
+    const e = this.el(); const scan = e.querySelector('#wx-scan');
+    scan.innerHTML = `<div class="wx-persona">
+        <div class="wx-persona-title">微信 bot 人格</div>
+        <div class="wx-persona-sub">这段会作为行为指令注入。手机上回复啰嗦时，让它更简洁。</div>
+        <textarea class="wx-persona-ta" id="wx-persona-ta" rows="6" placeholder="例如：用中文、简洁、适合手机看…">${escapeHtml(this.persona || '')}</textarea>
+        <div class="wx-persona-btns">
+          <span class="wx-scan-close" id="wx-persona-reset">恢复默认</span>
+          <span class="wx-spacer"></span>
+          <span class="wx-scan-close" id="wx-persona-cancel">取消</span>
+          <button class="wx-send" id="wx-persona-save">保存</button>
+        </div>
+      </div>`;
+    scan.classList.remove('hidden');
+    const ta = scan.querySelector('#wx-persona-ta');
+    scan.querySelector('#wx-persona-reset').onclick = () => { ta.value = this.personaDefault || ''; };
+    scan.querySelector('#wx-persona-cancel').onclick = () => { scan.classList.add('hidden'); };
+    scan.querySelector('#wx-persona-save').onclick = async () => {
+      const r = await window.fanboxWechat.setPersona(ta.value).catch(() => ({}));
+      this.persona = (r && r.persona) || ta.value;
+      scan.classList.add('hidden'); toast('人格已更新');
+    };
+  },
+  async disconnectPhone() { await window.fanboxWechat.disconnect().catch(() => {}); this.connected = false; this.syncBar(); toast('已断开手机微信'); },
+  syncDot(on) { const d = $('#wechat-dot'); if (d) d.classList.toggle('hidden', !on); const btn = $('#term-wechat'); if (btn) btn.classList.toggle('on', on); },
 };
 
 // ---------- 事件绑定 ----------
@@ -2214,16 +2297,16 @@ function bindEvents() {
   $('#cmdk-trigger').onclick = () => cmdk.open();
   $('#btn-recent').onclick = showRecent;
   $('#btn-changes').onclick = () => toggleChangesPanel();
-  $('#btn-wechat').onclick = () => wechatPanel.open();
-  // 启动时点一下连接状态，连着就给图标点个绿点（不挡初始化）
-  if (window.fanboxWechat) window.fanboxWechat.env().then((e) => wechatPanel.syncDot(!!(e && e.connected))).catch(() => {});
+  $('#term-wechat').onclick = () => wechatView.toggle();
+  // 启动时点一下连接状态，连着就给终端里的微信按钮点绿点（不挡初始化）
+  if (window.fanboxWechat) window.fanboxWechat.env().then((e) => wechatView.syncDot(!!(e && e.connected))).catch(() => {});
   $('#btn-terminal').onclick = () => term.toggle();
-  $('#term-claude').onclick = () => term.launchAgent('claude --dangerously-skip-permissions');
-  $('#term-codex').onclick = () => term.launchAgent('codex');
+  $('#term-claude').onclick = () => { wechatView.close(); term.launchAgent('claude --dangerously-skip-permissions'); };
+  $('#term-codex').onclick = () => { wechatView.close(); term.launchAgent('codex'); };
   usagePanel.bind();
   shotTray.init();
   $('#skills-entry').onclick = () => skillsView.show();
-  $('#term-newtab').onclick = () => term.newTab();
+  $('#term-newtab').onclick = () => { wechatView.close(); term.newTab(); };
   $('#term-max').onclick = () => term.toggleMax();
   // 双击终端顶栏空白处（避开标签/按钮/输入框）= 铺满终端：agent 交互窗口最重要，给它一键放到最大
   $('.term-head').addEventListener('dblclick', (ev) => {
@@ -2789,6 +2872,7 @@ const term = {
   },
   close() {
     if (this.maximized) this.toggleMax(false); // 铺满状态下收起终端，term-max 不清会把文件区一起藏没
+    if (typeof wechatView !== 'undefined' && wechatView.shown()) wechatView.close(); // 收起终端时一并关掉微信界面，停掉后台轮询
     $('#terminal-panel').classList.add('hidden');
     $('#terminal-resizer').classList.add('hidden');
     $('#main-body').classList.remove('fm-squeezed'); // 终端收起后文件区必须回来
