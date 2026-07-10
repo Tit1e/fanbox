@@ -8,12 +8,12 @@
 // FanBox 界面词典：中文原文 → 英文。由 i18n.js 消费；缺词条时英文界面回退显示中文。
 window.FANBOX_DICT = {
   // ---------- 侧栏 ----------
-  'Coding Agent的驾驶舱': 'The cockpit for coding agents',
+  'Codex 的驾驶舱': 'The cockpit for Codex',
   '搜索全部文件': 'Search all files',
   '快速入口': 'Quick access',
   '收藏': 'Favorites',
-  'Agent 项目': 'Agent projects',
-  '最近被 Claude Code / Codex 处理过的项目，自动从两者的本机会话记录扫出来': 'Projects recently worked on by Claude Code / Codex, auto-discovered from their local session logs',
+  'Codex 项目': 'Codex projects',
+  '最近被 Codex 处理过的项目，自动从本机会话记录扫出来': 'Projects recently worked on by Codex, auto-discovered from local session logs',
   '皮肤': 'Theme',
   '档案': 'Archive',
   '终端': 'Terminal',
@@ -27,7 +27,7 @@ window.FANBOX_DICT = {
   '没有子文件夹': 'No subfolders',
   '悬停文件点 ☆ 即可收藏': 'Hover a file and click ☆ to favorite',
   '移除': 'Remove',
-  '用 Claude Code / Codex 跑过的项目会出现在这里': 'Projects run with Claude Code / Codex will show up here',
+  '用 Codex 跑过的项目会出现在这里': 'Projects run with Codex will show up here',
 
   // ---------- 顶栏 ----------
   '折叠 / 展开侧栏 (⌘B)': 'Toggle sidebar (⌘B)',
@@ -42,7 +42,7 @@ window.FANBOX_DICT = {
   '小': 'Small',
   '中': 'Medium',
   '大': 'Large',
-  '本会话 agent 改过的文件（点击回看 / diff）': 'Files agents changed this session (click to review / diff)',
+  '本会话 Codex 改过的文件（点击回看 / diff）': 'Files Codex changed this session (click to review / diff)',
   '此处最近修改的文件': 'Recently modified files here',
   '在当前目录打开系统终端': 'Open system terminal in current folder',
   '最近修改的文件': 'Recently modified',
@@ -120,7 +120,7 @@ window.FANBOX_DICT = {
   '文件太大，暂不支持原地编辑': 'File too large for in-place editing',
   '有未保存的改动，放弃并退出？（保存请点取消后按 ⌘S）': 'Unsaved changes — discard and exit? (To save, hit Cancel then press ⌘S)',
   '当前编辑有未保存的改动，放弃并离开？': 'You have unsaved edits — discard and leave?',
-  '文件已被外部修改（可能是 agent 改的）。覆盖会丢掉外部改动，确定覆盖？': 'File was modified externally (possibly by an agent). Overwriting discards those changes — overwrite?',
+  '文件已被外部修改（可能是 Codex 改的）。覆盖会丢掉外部改动，确定覆盖？': 'File was modified externally (possibly by Codex). Overwriting discards those changes — overwrite?',
 
   // ---------- 图片编辑 ----------
   '加载图片…': 'Loading image…',
@@ -177,7 +177,7 @@ window.FANBOX_DICT = {
 
   // ---------- 截图直通车 ----------
   '新截图 · 可拖进终端': 'New screenshot · drag into terminal',
-  '把路径喂给终端里的 agent': 'Feed the path to the agent in the terminal',
+  '把路径喂给终端里的 Codex': 'Feed the path to Codex in the terminal',
   '→ 终端': '→ Terminal',
   '移动到当前文件夹的 素材/ 子目录': "Move into this folder's 素材/ (assets) subfolder",
   '收进素材': 'File into assets',
@@ -188,10 +188,9 @@ window.FANBOX_DICT = {
   '移动失败': 'Move failed',
 
   // ---------- AI 整理（终端交互式）----------
-  '没找到 claude / codex 命令——AI 整理需要装其中一个 CLI': 'claude / codex command not found — AI organize needs one of these CLIs installed',
+  '没找到 codex 命令——AI 整理需要先安装 Codex CLI': 'codex command not found — install Codex CLI before using AI organize',
   'AI 整理启动失败': 'Failed to launch AI organize',
   '返回': 'Back',
-  'Claude 已开聊——先摊方案，你点头它才动手': 'Claude is ready — it lays out a plan first and only moves files after you approve',
   'Codex 已开聊——先摊方案，你点头它才动手': 'Codex is ready — it lays out a plan first and only moves files after you approve',
 
   // ---------- 发版面板 ----------
@@ -229,13 +228,13 @@ window.FANBOX_DICT = {
 
   // ---------- 欢迎页（首次引导，按文本片段拆分）----------
   '欢迎用 FanBox': 'Welcome to FanBox',
-  'vibe coding 的驾驶舱——找文件、跑 agent、看它改、随手改，都在一个窗口：': 'The vibe-coding cockpit — find files, run agents, watch them edit, edit on the fly, all in one window:',
+  'Codex 的驾驶舱——找文件、跑 Codex、看它改、随手改，都在一个窗口：': 'The Codex cockpit — find files, run Codex, watch it edit, edit on the fly, all in one window:',
   '全局搜文件和文件夹；': 'searches all files and folders;',
   '把项目直接在编辑器整包打开；': 'opens the whole project in your editor;',
   '内容:关键词': 'content:keyword',
   '搜文件里的字': 'searches inside files',
   '顶部': 'The top',
-  '按钮开内嵌终端跑 Claude Code 等 agent；': 'button opens an embedded terminal for agents like Claude Code;',
+  '按钮开内嵌终端跑 Codex；': 'button opens an embedded terminal running Codex;',
   '把文件/文件夹拖进终端': 'drag files/folders into the terminal',
   '即插入路径喂给它当上下文': 'to insert paths as context',
   '单击': 'Single-click',
@@ -245,22 +244,21 @@ window.FANBOX_DICT = {
   '编辑': 'Edit',
   'md 走所见即所得、': 'gives WYSIWYG markdown,',
   '可标注/打码/转格式': 'lets you annotate / pixelate / convert',
-  'agent 改了哪些文件，列表实时高亮「改·N」，不用切窗口盯着看': 'Files agents touch light up live as "edited ×N" — no window-switching to keep watch',
+  'Codex 改了哪些文件，列表实时高亮「改·N」，不用切窗口盯着看': 'Files Codex touches light up live as "edited ×N" — no window-switching to keep watch',
   '开始使用': 'Get started',
 
   // ---------- 终端 ----------
-  '启动 Claude Code（跳过权限确认）：空闲终端就地启动，正跑着任务则新开标签': 'Launch Claude Code (skipping permission prompts): starts in the idle terminal, or opens a new tab if one is busy',
   '启动 Codex：空闲终端就地启动，正跑着任务则新开标签': 'Launch Codex: starts in the idle terminal, or opens a new tab if one is busy',
-  '选择一键启动的 coding agent': 'Choose quick-launch coding agents',
-  '一键启动的 coding agent': 'Quick-launch coding agents',
-  '勾选即生效 · 点「未装」复制安装命令': 'Changes apply instantly · click “not installed” to copy the install command',
-  '高级：~/.fanbox/config.json 的 agents 数组可自定义命令 / 加新 agent': 'Advanced: override commands or add agents via the agents array in ~/.fanbox/config.json',
-  '未装': 'not installed',
-  '已复制安装命令': 'Install command copied',
-  '文件跟随：跟着当前终端 tab 的 agent，它改哪个文件，文件区和预览就跟到哪；html/md 边写边出实时预览（手动浏览即自动停）': "Follow files: tracks the current terminal tab's agent — the file view and preview follow whatever it edits; html/md render live as they are written (any manual browsing stops it)",
+  '终端设置': 'Terminal settings',
+  '终端渲染': 'Terminal rendering',
+  'WebGL 加速渲染': 'WebGL accelerated rendering',
+  '长时间中文输出偶发乱码时可关掉：改用兼容渲染（DOM），立即生效，稍慢但稳': 'Turn this off if long CJK output becomes corrupted. DOM compatibility rendering applies immediately and is slower but steadier.',
+  'WebGL 渲染已开启': 'WebGL rendering enabled',
+  '已切换兼容渲染（修中文乱码）': 'Switched to compatibility rendering for CJK stability',
+  '文件跟随：跟着当前终端 tab 的 Codex，它改哪个文件，文件区和预览就跟到哪；html/md 边写边出实时预览（手动浏览即自动停）': "Follow files: tracks Codex in the current terminal tab — the file view and preview follow whatever it edits; html/md render live as they are written (any manual browsing stops it)",
   '文件跟随': 'Follow files',
   '绑定的终端已关闭，文件跟随已停': 'The bound terminal was closed — follow stopped',
-  '文件跟随已开：agent 改哪个文件就看哪个': 'Follow on: now tracking whatever file the agent edits',
+  '文件跟随已开：Codex 改哪个文件就看哪个': 'Follow on: now tracking whatever file Codex edits',
   '文件跟随已停': 'Follow stopped',
   '手动接管，文件跟随已停': 'You took over — follow stopped',
   '跟随中': 'LIVE',
@@ -274,7 +272,7 @@ window.FANBOX_DICT = {
   '收起终端': 'Hide terminal',
   '提示音已关（点击开启）': 'Chime off (click to enable)',
   '提示音已开（点击静音）': 'Chime on (click to mute)',
-  '提示：把左侧文件 / 文件夹拖进终端，即插入路径喂给 agent': 'Tip: drag files / folders into the terminal to insert their paths as agent context',
+  '提示：把左侧文件 / 文件夹拖进终端，即插入路径喂给 Codex': 'Tip: drag files / folders into the terminal to insert their paths as Codex context',
   '终端启动失败': 'Terminal failed to start',
   '已在终端启动': 'Started in terminal',
   '内嵌终端不可用（网页版没有终端）': 'Embedded terminal unavailable (no terminal in the web version)',
@@ -283,26 +281,26 @@ window.FANBOX_DICT = {
   '已按会话里出现过的路径打开': 'Opened via a path seen in this session',
   '取终端目录失败': "Couldn't get the terminal's folder",
   '进程已退出': 'Process exited',
-  'agent 运行中': 'Agent running',
+  'Codex 运行中': 'Codex running',
   '空闲': 'Idle',
   '双击：文件区跳到该终端所在目录': "Double-click: jump file view to this terminal's folder",
   '等待你确认': 'Waiting for your approval',
-  'agent 任务完成': 'Agent task done',
+  'Codex 任务完成': 'Codex task done',
   '终端已退出': 'Terminal exited',
   '[进程已退出 — 回车重开，或 ✕ 关闭]': '[Process exited — Enter to restart, or ✕ to close]',
 
   // ---------- 变更收件箱 / 会话回放 ----------
   '本会话变更': 'Changes this session',
   '还没有捕捉到文件变更。': 'No file changes captured yet.',
-  '跑起 agent，它改的文件会实时出现在这里。': 'Run an agent and its edits will show up here live.',
+  '跑起 Codex，它改的文件会实时出现在这里。': 'Run Codex and its edits will show up here live.',
   '▶ 回放': '▶ Replay',
   '清空': 'Clear',
   '关闭 (Esc)': 'Close (Esc)',
-  '此刻 agent 正在改': 'Agent editing right now',
+  '此刻 Codex 正在改': 'Codex is editing right now',
   '▶ 播放': '▶ Play',
   '⏸ 暂停': '⏸ Pause',
   '↻ 重播': '↻ Replay',
-  '变更太少，先让 agent 多改几下再回放': 'Not enough changes yet — let the agent edit a bit more before replaying',
+  '变更太少，先让 Codex 多改几下再回放': 'Not enough changes yet — let Codex edit a bit more before replaying',
 
   // ---------- 更新提示 ----------
   '去下载': 'Download',
@@ -324,10 +322,6 @@ window.FANBOX_DICT = {
 };
 // 含插值的动态文案：正则 → 替换式（$1 等捕获组），EN 模式下逐条尝试
 window.FANBOX_DICT_RULES = [
-  // agent 启动按钮（动态生成的 title/toast）
-  [/^启动 (.+)：空闲终端就地启动，正跑着任务则新开标签$/, (m) => `Launch ${m[1]}: starts in the idle terminal, or opens a new tab if one is busy`],
-  [/^打开 (.+) 桌面应用（该产品无终端 CLI 形态）$/, (m) => `Open the ${m[1]} desktop app (no terminal CLI available)`],
-  [/^点击复制安装命令：(.+)$/, (m) => `Click to copy the install command: ${m[1]}`],
   // 状态栏：N 项 · N 文件夹 · N 文件 大小
   [/^(\d+) 项( · (\d+) 文件夹)?( · (\d+) 文件 (.+))?$/, (m) => `${m[1]} items${m[3] ? ` · ${m[3]} folders` : ''}${m[5] ? ` · ${m[5]} files ${m[6]}` : ''}`],
   // 压缩包条目数：123 项 / 500+ 项
@@ -336,7 +330,7 @@ window.FANBOX_DICT_RULES = [
   [/^(\d+) 分钟前$/, (m) => `${m[1]} min ago`],
   [/^(\d+) 小时前$/, (m) => `${m[1]} hr ago`],
   [/^(\d+) 天前$/, (m) => `${m[1]} days ago`],
-  // 短相对时间（agoShort：侧栏 Agent 项目）
+  // 短相对时间（agoShort：侧栏 Codex 项目）
   [/^(\d+) 分$/, (m) => `${m[1]}m`],
   [/^(\d+) 时$/, (m) => `${m[1]}h`],
   [/^(\d+) 天$/, (m) => `${m[1]}d`],
@@ -373,7 +367,7 @@ window.FANBOX_DICT_RULES = [
   // 预览底部：创建/修改时间
   [/^创建 (.+)$/, (m) => `Created ${m[1]}`],
   [/^改 (.+)$/, (m) => `Modified ${m[1]}`],
-  // 侧栏 Agent 项目 tooltip：路径\nagents · N 时前活跃
+  // 侧栏 Codex 项目 tooltip：路径\nCodex · N 时前活跃
   [/^([\s\S]+)\n(.+) · (刚刚|\d+ 分|\d+ 时|\d+ 天)前活跃$/, (m) => {
     const t = m[3] === '刚刚' ? 'just now' : m[3].replace(/^(\d+) 分$/, '$1m ago').replace(/^(\d+) 时$/, '$1h ago').replace(/^(\d+) 天$/, '$1d ago');
     return `${m[1]}\n${m[2]} · active ${t}`;

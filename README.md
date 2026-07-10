@@ -2,7 +2,7 @@
 
 # 📦 FanBox
 
-<img src="assets/promo-banner.jpg" alt="FanBox · Coding Agent 的驾驶舱" width="100%">
+<img src="assets/promo-banner.jpg" alt="FanBox · Codex 的本地桌面驾驶舱" width="100%">
 
 <br><br>
 
@@ -17,16 +17,16 @@
 
 <br>
 
-**FanBox：Coding Agent 的驾驶舱。指挥 Claude Code、Codex 在本地干活，看清它碰过的每个文件、改过的每一行，随时接手。**<br>
-**FanBox — the cockpit for coding agents: command Claude Code or Codex, see every file and line they change, and take over anytime.**
+**FanBox：Codex 的本地桌面驾驶舱。让 Codex 在本地干活，看清它碰过的每个文件、改过的每一行，随时接手。**<br>
+**FanBox — the local desktop cockpit for Codex: run Codex, see every file and line it changes, and take over anytime.**
 
 <br>
 
-一边浏览、预览、编辑本地文件；一边在内嵌真实终端里跑 Claude Code 或任何 coding agent。<br>
- agent 每写一个文件，对应卡片就会亮起来——*找回文件 → 运行 agent → 看清改了什么*，全部在一个窗口完成。<br>
+一边浏览、预览、编辑本地文件；一边在内嵌真实终端里跑 Codex。<br>
+ Codex 每写一个文件，对应卡片就会亮起来——*找回文件 → 运行 Codex → 看清改了什么*，全部在一个窗口完成。<br>
 <br>
-Browse, preview and edit local files on one side; run Claude Code or any coding agent in a real embedded terminal on the other.<br>
-Every time the agent writes a file, its card lights up — *find files → run agents → see what changed*, all in one window.
+Browse, preview and edit local files on one side; run Codex in a real embedded terminal on the other.<br>
+Every time Codex writes a file, its card lights up — *find files → run Codex → see what changed*, all in one window.
 
 <br>
 
@@ -47,13 +47,13 @@ Every time the agent writes a file, its card lights up — *find files → run a
 <a id="why-fanbox"></a>
 ## Why FanBox · 为什么要做 FanBox
 
-AI 帮你一个下午起十个项目，但它们散在各处、名字认不出、改了啥看不见。每天的真实流程是：Finder 里翻半天 → 切到 iTerm 启 agent → 再切浏览器看效果，三个窗口来回跳。
+Codex 帮你一个下午起十个项目，但它们散在各处、名字认不出、改了啥看不见。每天的真实流程是：Finder 里翻半天 → 切到 iTerm 启 Codex → 再切浏览器看效果，三个窗口来回跳。
 
-AI helps you start ten projects in an afternoon — then they scatter everywhere, the names stop making sense, and you can't see what got changed. The daily reality: dig through Finder → switch to iTerm to launch an agent → switch to the browser to check results. Three windows, endless hopping.
+Codex helps you start ten projects in an afternoon — then they scatter everywhere, the names stop making sense, and you can't see what got changed. The daily reality: dig through Finder → switch to iTerm to launch Codex → switch to the browser to check results. Three windows, endless hopping.
 
-FanBox 把这条链路收进一个窗口：**左边文件 × 右边/下边终端 × 原地预览**，一个有机整体。它不跟 Finder 拼文件操作，不跟 VS Code 拼编辑，专注「找回 + 预览 + 轻改 + 指挥 agent」这一条链路做到顺手。
+FanBox 把这条链路收进一个窗口：**左边文件 × 右边/下边终端 × 原地预览**，一个有机整体。它不跟 Finder 拼文件操作，不跟 VS Code 拼编辑，专注「找回 + 预览 + 轻改 + 指挥 Codex」这一条链路做到顺手。
 
-FanBox folds that loop into one window: **files on the left × terminal on the right/bottom × preview in place**. It doesn't compete with Finder on file ops or VS Code on editing. It does one chain well: *find → preview → light edits → command the agent*.
+FanBox folds that loop into one window: **files on the left × terminal on the right/bottom × preview in place**. It doesn't compete with Finder on file ops or VS Code on editing. It does one chain well: *find → preview → light edits → command Codex*.
 
 不做云、不做远程、不做账号。本地、零配置、运行时零依赖。
 
@@ -88,44 +88,44 @@ The UI was designed with [huashu-design](https://github.com/alchaincyf/huashu-de
 - **项目徽章 / Project badges** — 文件夹卡片标 node / web / py / rs / go 徽章，一下午起的十个项目一眼认出类型。  
   Folder cards show node / web / py / rs / go badges, so ten projects from one afternoon are recognizable at a glance.
 
-### Watch what the agent changed · 看 agent 改了什么
+### Watch what Codex changed · 看 Codex 改了什么
 
-- **活的仪表盘 / A live dashboard** — agent 每写一个文件，那张卡片当场荡开涟漪、按改动频率发光呼吸，agent 写到哪光走到哪。  
-  Every file the agent writes makes its card ripple and glow by change frequency; the light follows wherever the agent goes.
-- **跟随模式 / Follow mode** — 一键让文件视图 + 预览跟踪 agent 正在编辑的文件：代码随新写行高亮闪烁，HTML 边写边实时渲染（双缓冲、零白闪），Markdown 实时渲染。任何手动浏览立即把控制权交还给你。  
-  One click and the file view + preview track whatever file the agent edits: code scrolls with freshly written lines flashing, HTML renders as a live web page while it's being written (double-buffered, zero white flash), Markdown renders live. Any manual browsing hands control back to you instantly.
-- **会话回放 / Session replay** — 像刷视频一样拖时间轴，重现这段时间 agent 一步步改了哪些文件。  
-  Drag the timeline like scrubbing a video to replay which files the agent touched, step by step.
-- **变更收件箱 / Change inbox** — 跨多个项目汇总本会话所有被改动的文件，多项目并行跑 agent 不再各看各的。  
-  All files modified this session, aggregated across projects, for parallel agent runs.
-- **Git 改动 diff / Git diff** — Monaco 只读 DiffEditor 并排展示 HEAD vs 当前工作区，看清 agent 到底改了哪几行。  
+- **活的仪表盘 / A live dashboard** — Codex 每写一个文件，那张卡片当场荡开涟漪、按改动频率发光呼吸，Codex 写到哪光走到哪。
+  Every file Codex writes makes its card ripple and glow by change frequency; the light follows wherever Codex goes.
+- **跟随模式 / Follow mode** — 一键让文件视图 + 预览跟踪 Codex 正在编辑的文件：代码随新写行高亮闪烁，HTML 边写边实时渲染（双缓冲、零白闪），Markdown 实时渲染。任何手动浏览立即把控制权交还给你。
+  One click and the file view + preview track whatever Codex edits: code scrolls with freshly written lines flashing, HTML renders live as it is written (double-buffered, zero white flash), and Markdown renders live. Any manual browsing hands control back to you instantly.
+- **会话回放 / Session replay** — 像刷视频一样拖时间轴，重现这段时间 Codex 一步步改了哪些文件。
+  Drag the timeline like scrubbing a video to replay which files Codex touched, step by step.
+- **变更收件箱 / Change inbox** — 跨多个项目汇总本会话所有被改动的文件，多项目并行跑 Codex 不再各看各的。
+  All files modified this session, aggregated across parallel Codex runs.
+- **Git 改动 diff / Git diff** — Monaco 只读 DiffEditor 并排展示 HEAD vs 当前工作区，看清 Codex 到底改了哪几行。
   Monaco read-only DiffEditor, HEAD vs working tree side by side.
 
-### Agent cockpit · Agent 驾驶舱
+### Codex cockpit · Codex 驾驶舱
 
-- **截图直通车 / Screenshot express** — 系统截屏落盘即浮出直通卡：喂给终端里的 agent、收进项目 `素材/`、或先标注再发。  
-  Take a system screenshot and a card pops up in the corner: feed it to the terminal agent, file it into the project's `素材/` (assets) folder, or annotate before sending.
-- **AI 整理 / AI organize** — AI 只看元数据出整理提案（不读内容、不碰文件系统），每条建议带理由、逐条勾选过人，FanBox 执行并写回滚日志、一键整体撤销。引擎可选（Claude Code / Codex），策略提示词随便改。  
-  AI proposes a cleanup plan from metadata only (it never reads content or touches the filesystem); you approve each move; FanBox executes with a rollback log and one-click undo. Engine selectable (Claude Code / Codex), strategy prompt fully editable.
+- **截图直通车 / Screenshot express** — 系统截屏落盘即浮出直通卡：喂给终端里的 Codex、收进项目 `素材/`、或先标注再发。
+  Take a system screenshot and a card pops up in the corner: feed it to Codex, file it into the project's `素材/` (assets) folder, or annotate before sending.
+- **AI 整理 / AI organize** — Codex 读取整理 brief 后先提出方案，用户确认才移动文件；每批操作写回滚日志，并沉淀整理偏好。
+  Codex reads a generated organize brief, proposes a plan first, and moves files only after approval; every batch writes a rollback log and preserves learned preferences.
 - **发版向导 / Release wizard** — node 项目一键串起版本号、CHANGELOG、打包、推送、GitHub Release，整条命令序列在内嵌终端可见地跑。  
   For node projects: version bump, CHANGELOG promotion, build, push and GitHub Release composed into one command sequence that runs visibly in the embedded terminal.
 - **磁盘占用透视 / Disk usage lens** — `du` 口径的真实占用条形榜，可下钻，专治「电脑空间又满了」。  
   `du`-accurate bars per folder, drill-down, for the "my disk is full again" moments.
 
-### Terminal · command the agent / 终端 · 指挥 agent
+### Terminal · command Codex / 终端 · 指挥 Codex
 
-- **真实内嵌终端 / A real embedded terminal** — node-pty + xterm.js（WebGL 渲染），跑 Claude Code / vim / htop 不花屏，中文宽字符正确。  
-  node-pty + xterm.js (WebGL). Claude Code / vim / htop render correctly, CJK wide characters included.
-- **拖文件进终端 / Drag files in** — 从文件列表拖文件/文件夹进终端，自动插入路径喂给 agent 当上下文。  
-  Drop a file or folder into the terminal to insert its path as agent context.
+- **真实内嵌终端 / A real embedded terminal** — node-pty + xterm.js（WebGL 渲染），跑 Codex / vim / htop 不花屏，中文宽字符正确。
+  node-pty + xterm.js (WebGL). Codex / vim / htop render correctly, CJK wide characters included.
+- **拖文件进终端 / Drag files in** — 从文件列表拖文件/文件夹进终端，自动插入路径喂给 Codex 当上下文。
+  Drop a file or folder into the terminal to insert its path as Codex context.
 - **路径可点击 / Clickable paths** — 终端里出现的文件路径直接点击在 FanBox 打开；带空格的 macOS 截屏名、中文文件名、折行的长路径都能识别（空格边界由文件系统 stat 验证，不靠猜）。  
   File paths appearing in terminal output open in FanBox on click; macOS screenshot names with spaces, Chinese filenames and wrapped long paths are all recognized (space boundaries verified by stat, not guessed).
 - **选中即甩给终端 / Send selection** — 预览里选一段文字，一键以「文件出处 + 围栏」格式发进终端（bracketed paste 包裹，不会被逐行误执行）。  
   Select text in a preview and fling it into the terminal with file provenance + fencing (bracketed paste, never executed line by line).
-- **态势感知 / Situational awareness** — 标签圆点显示 agent 运行/空闲/退出；agent 把球踢回给你时终端边缘呼吸提示「轮到你」，长任务完成发系统通知。  
-  Tab dots show running/idle/exited; when the agent hands the ball back, the terminal edge breathes; long tasks fire a system notification.
-- **11 个 agent 一键启动 / 11 built-in agent launchers** — Claude Code、Codex、Hermes Agent、OpenClaw、Kimi Code、ZCode、opencode、pi、CodeBuddy、WorkBuddy、Qoder CLI，官方图标 + 核实过的启动命令。滑杆按钮打开设置面板勾选启用哪些（默认 Claude Code + Codex），未装的一键复制安装命令；`~/.fanbox/config.json` 的 `agents` 数组可自定义命令或追加新 agent。  
-  All with official icons and verified launch commands. A sliders button opens the picker (defaults: Claude Code + Codex); not-installed entries copy their install command in one click; the `agents` array in `~/.fanbox/config.json` overrides commands or adds new agents.
+- **态势感知 / Situational awareness** — 标签圆点显示 Codex 运行/空闲/退出；Codex 把球踢回给你时终端边缘呼吸提示「轮到你」，长任务完成发系统通知。
+  Tab dots show running/idle/exited; when Codex hands the ball back, the terminal edge breathes; long tasks fire a system notification.
+- **Codex 一键启动 / Codex quick launch** — 顶栏固定 Codex 按钮：空闲 shell 就地启动，已有任务时自动新开终端标签；旁边的终端设置保留 WebGL 兼容开关。
+  The fixed Codex button starts in an idle shell or opens a new terminal tab when one is busy; terminal settings keep the WebGL compatibility toggle available.
 
 ### Editing · WYSIWYG / 编辑 · 所见即所得
 
@@ -205,8 +205,8 @@ npm run dist         # 打包签名 .dmg（产物在 dist/，不入 git）/ buil
 
 - 后端只在本机回环地址监听 + 校验 Host 头（挡 DNS rebinding），**数据不出本机**。  
   The backend listens on loopback only and validates the Host header (anti DNS-rebinding). **Data never leaves your machine.**
-- 全部前端资源（含渲染器、字体）本地内置，**离线完全可用**。仅有的出网请求：Claude 用量接口（可选）和 GitHub 更新检查。  
-  All frontend assets (including renderers and fonts) are vendored locally — **fully usable offline**. The only outbound calls: the Claude usage API (optional) and the GitHub release check.
+- 全部前端资源（含渲染器、字体）本地内置，**离线完全可用**。FanBox 自身仅在检查更新时访问 GitHub。
+  All frontend assets (including renderers and fonts) are vendored locally — **fully usable offline**. FanBox itself only contacts GitHub to check for updates.
 - HTML 预览在隔离 origin 的沙箱 iframe 里渲染，预览不可信网页也碰不到终端能力。  
   HTML previews render in a sandboxed iframe with an opaque origin; an untrusted page can never reach terminal capabilities.
 - 配置写入走串行化读-改-写 + 原子写（temp + fsync + rename），不丢数据、不留半截 JSON。  

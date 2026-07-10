@@ -5,7 +5,6 @@
 A-终端核.html: Volt 深色终端核原型，固定 1440px 画布与 JetBrains Mono/Inter 字体
 B-暖色档案馆.html: Archive 暖色档案馆原型，使用 Fraunces/Inter/Geist Mono 排版
 C-编辑式粗野.html: Index 编辑式粗野原型，使用黑白红绿高对比与等宽信息层级
-Skills透视-暖色档案馆.html: Skills 透视面板原型，展示登记册与卡片行两种信息密度
 promo/banner-archive-v2.html: Archive v2 宣传横幅源码，1880x800 固定画布
 promo/banner-archive-v2.png: Archive v2 宣传横幅渲染图，1880x800 PNG
 promo/banner-archive.html: Archive 初版宣传横幅源码，1880x800 固定画布

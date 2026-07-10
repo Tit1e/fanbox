@@ -480,10 +480,9 @@ async function renamePath(p, newName) {
   return { ok: true, path: dst };
 }
 
-// ---------- AI 整理：备料 + 在内嵌终端拉起交互式 agent（v2，对话式；v1 headless 提案已废弃）----------
-// 翻箱不再后台跑 claude -p：把整理偏好、过往整理历史、工作约定写成 brief 文件，
-// 前端在内嵌终端启动 claude/codex，方案摊给用户对话确认后由 agent 动手。
-// 约定：agent 每批移动追加写 ORGANIZE_LOG_DIR 回滚日志（撤销在对话里完成）、收尾把新学到的偏好沉淀进 prefs 文件。
+// ---------- AI 整理：备料 + 在内嵌终端拉起 Codex ----------
+// 翻箱只负责把整理偏好、过往整理历史和工作约定写成 brief 文件；
+// Codex 先摊方案，用户确认后再动手，并持续写回滚日志与偏好。
 const ORGANIZE_LOG_DIR = path.join(CONFIG_DIR, 'organize-log');
 const ORGANIZE_PREFS_FILE = path.join(CONFIG_DIR, 'organize-prefs.md');
 const ORGANIZE_BRIEF_FILE = path.join(CONFIG_DIR, 'organize-brief.md');
@@ -509,10 +508,10 @@ async function codexOrganizeFlags(bin) {
   return flags;
 }
 
-async function findAgentBin(name) {
+async function findCodexBin() {
   // GUI 启动的 app 没有用户 shell 的 PATH，走登录 shell 找一次绝对路径
   return new Promise((resolve) => {
-    execFile('/bin/zsh', ['-lc', `command -v ${name}`], { timeout: 8000 }, (err, stdout) => {
+    execFile('/bin/zsh', ['-lc', 'command -v codex'], { timeout: 8000 }, (err, stdout) => {
       const out = String(stdout || '').trim().split('\n').pop();
       resolve(!err && out && out.startsWith('/') ? out : null);
     });
@@ -539,15 +538,8 @@ async function organizeHistory() {
 // 备料并返回终端启动命令：brief 写盘（偏好 + 历史 + 工作约定），前端用 term.runInDir 拉起交互式 agent
 async function organizeLaunch(b) {
   const dir = resolvePath(b.path);
-  const cfg = await readConfig();
-  let engine = cfg.organizeEngine === 'codex' ? 'codex' : 'claude';
-  let bin = await findAgentBin(engine);
-  if (!bin) {
-    const alt = engine === 'claude' ? 'codex' : 'claude';
-    bin = await findAgentBin(alt);
-    if (bin) engine = alt;
-    else return { ok: false, error: '没找到 claude / codex 命令——AI 整理需要装其中一个 CLI' };
-  }
+  const bin = await findCodexBin();
+  if (!bin) return { ok: false, error: '没找到 codex 命令——AI 整理需要先安装 Codex CLI' };
   const prefs = await fsp.readFile(ORGANIZE_PREFS_FILE, 'utf8').catch(() => '');
   const history = await organizeHistory();
   const brief = `# AI 整理任务（翻箱 FanBox 生成，每次启动覆盖本文件）
@@ -579,11 +571,8 @@ ${history || '（还没有历史记录）'}
   await fsp.mkdir(ORGANIZE_LOG_DIR, { recursive: true });
   await fsp.writeFile(ORGANIZE_BRIEF_FILE, brief, 'utf8');
   const kickoff = `先完整读 ${ORGANIZE_BRIEF_FILE}，然后按里面的约定，和我对话式整理当前文件夹`;
-  // claude 跳权限确认（动手前方案已过人）；codex 旗标按当前版本实测拼出
-  const cmd = engine === 'codex'
-    ? `codex${await codexOrganizeFlags(bin)} "${kickoff}"`
-    : `claude --dangerously-skip-permissions "${kickoff}"`;
-  return { ok: true, engine, cmd };
+  const cmd = `codex${await codexOrganizeFlags(bin)} "${kickoff}"`;
+  return { ok: true, cmd };
 }
 
 // ---------- 发版向导：检查项目状态 → 改版本号/CHANGELOG → 命令序列交给内嵌终端跑（每步可见可拦）----------
@@ -1240,195 +1229,9 @@ function readBody(req) {
   });
 }
 
-// ---------- Agent 用量（Claude Code / Codex）----------
-// 不依赖两个 CLI 在跑：直接读它们落在本机的会话日志。
-// Claude Code：~/.claude/projects/**/*.jsonl 里每条 assistant 消息带 usage（token 明细）→ 增量解析聚合
-// Codex：~/.codex/sessions/**/rollout-*.jsonl 的 token_count 事件带 rate_limits（5h 窗口/周配额百分比，官方数）→ tail 取最新快照
-const CLAUDE_PROJ = path.join(HOME, '.claude', 'projects');
+// ---------- Codex 项目（最近被 Codex 处理过的项目文件夹）----------
 const CODEX_SESS = path.join(HOME, '.codex', 'sessions');
-const claudeFileCache = new Map(); // file -> { offset, lastMsgId, events: [{t, in, out, cc, cr}] }
-let usageResultCache = { at: 0, data: null };
-
-async function parseClaudeFile(file, stat) {
-  let c = claudeFileCache.get(file);
-  if (!c) { c = { offset: 0, lastMsgId: '', events: [] }; claudeFileCache.set(file, c); }
-  if (stat.size < c.offset) { c.offset = 0; c.lastMsgId = ''; c.events = []; } // 文件被截断重写：重来
-  if (stat.size === c.offset) return c.events;
-  const fh = await fsp.open(file, 'r');
-  let chunk;
-  try {
-    const len = stat.size - c.offset;
-    const buf = Buffer.alloc(len);
-    await fh.read(buf, 0, len, c.offset);
-    chunk = buf.toString('utf8');
-  } finally { await fh.close(); }
-  // 末尾可能是写到一半的行：留给下一轮，offset 只推进到最后一个完整换行
-  const lastNL = chunk.lastIndexOf('\n');
-  if (lastNL === -1) return c.events;
-  c.offset += Buffer.byteLength(chunk.slice(0, lastNL + 1), 'utf8');
-  for (const line of chunk.slice(0, lastNL).split('\n')) {
-    if (!line.includes('"usage"') || !line.includes('"assistant"')) continue;
-    let d; try { d = JSON.parse(line); } catch { continue; }
-    const m = d && d.message;
-    const u = m && m.usage;
-    if (!u || d.type !== 'assistant') continue;
-    if (m.model === '<synthetic>') continue;
-    if (m.id && m.id === c.lastMsgId) continue; // 同一条消息分多行落盘，usage 重复：只记第一次
-    if (m.id) c.lastMsgId = m.id;
-    const t = Date.parse(d.timestamp || '') || stat.mtimeMs;
-    c.events.push({ t, in: u.input_tokens || 0, out: u.output_tokens || 0, cc: u.cache_creation_input_tokens || 0, cr: u.cache_read_input_tokens || 0 });
-  }
-  return c.events;
-}
-
-async function claudeUsage() {
-  const cutoff = Date.now() - 8 * 86400000;
-  const files = [];
-  let dirs;
-  try { dirs = await fsp.readdir(CLAUDE_PROJ); } catch { return null; } // 没装/没用过 Claude Code
-  await Promise.all(dirs.map(async (d) => {
-    let names;
-    try { names = await fsp.readdir(path.join(CLAUDE_PROJ, d)); } catch { return; }
-    await Promise.all(names.filter((n) => n.endsWith('.jsonl')).map(async (n) => {
-      const fp = path.join(CLAUDE_PROJ, d, n);
-      try { const st = await fsp.stat(fp); if (st.mtimeMs >= cutoff) files.push({ fp, st }); } catch { /* */ }
-    }));
-  }));
-  const live = new Set(files.map((f) => f.fp));
-  for (const k of claudeFileCache.keys()) { if (!live.has(k)) claudeFileCache.delete(k); } // 过期文件出缓存
-  const all = [];
-  for (const { fp, st } of files) { try { all.push(...await parseClaudeFile(fp, st)); } catch { /* 单文件坏不挡整体 */ } }
-  const now = Date.now();
-  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-  const mk = () => ({ total: 0, input: 0, output: 0, cacheRead: 0, cacheCreate: 0, msgs: 0 });
-  const last5h = mk(), today = mk(), week = mk();
-  for (const e of all) {
-    const tot = e.in + e.out + e.cc + e.cr;
-    for (const [b, from] of [[last5h, now - 5 * 3600000], [today, dayStart.getTime()], [week, now - 7 * 86400000]]) {
-      if (e.t >= from) { b.total += tot; b.input += e.in; b.output += e.out; b.cacheRead += e.cr; b.cacheCreate += e.cc; b.msgs++; }
-    }
-  }
-  return { last5h, today, week };
-}
-
-// 从最近改动的 rollout 文件尾部抓最后一条带 rate_limits 的 token_count（官方配额快照）
-async function codexUsage() {
-  const files = [];
-  const walk = async (dir, depth) => {
-    let names;
-    try { names = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
-    for (const n of names) {
-      const fp = path.join(dir, n.name);
-      if (n.isDirectory() && depth < 3) await walk(fp, depth + 1);
-      else if (n.isFile() && n.name.endsWith('.jsonl')) {
-        try { const st = await fsp.stat(fp); files.push({ fp, mtimeMs: st.mtimeMs, size: st.size }); } catch { /* */ }
-      }
-    }
-  };
-  await walk(CODEX_SESS, 0);
-  if (!files.length) return null;
-  files.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  for (const f of files.slice(0, 10)) { // 最新几个会话里找；都没有就放弃
-    try {
-      const fh = await fsp.open(f.fp, 'r');
-      let txt;
-      try {
-        const len = Math.min(f.size, 262144);
-        const buf = Buffer.alloc(len);
-        await fh.read(buf, 0, len, f.size - len);
-        txt = buf.toString('utf8');
-      } finally { await fh.close(); }
-      const lines = txt.split('\n').reverse();
-      for (const line of lines) {
-        if (!line.includes('"rate_limits"')) continue;
-        let d; try { d = JSON.parse(line); } catch { continue; }
-        const pl = d && d.payload;
-        const rl = pl && pl.rate_limits;
-        if (!rl || (!rl.primary && !rl.secondary)) continue;
-        const capturedAt = Date.parse(d.timestamp || '') || f.mtimeMs;
-        // 快照是「当时」的数：窗口在快照之后重置过的话，旧百分比就完全失真（比如 21 小时前
-        // 的 5h 窗口 57%），归零并标 stale——没有新会话日志就说明重置后根本没用过
-        const win = (w) => {
-          if (!w) return null;
-          let resetsAt = w.resets_at || 0;
-          if (typeof resetsAt === 'string') resetsAt = Math.floor(Date.parse(resetsAt) / 1000) || 0;
-          let end = resetsAt * 1000;
-          if (!end && w.resets_in_seconds != null) end = capturedAt + w.resets_in_seconds * 1000;
-          if (!end && w.window_minutes) end = capturedAt + w.window_minutes * 60000;
-          const stale = !!end && end < Date.now();
-          return { usedPercent: stale ? 0 : w.used_percent, windowMinutes: w.window_minutes, resetsAt: stale ? 0 : resetsAt, stale };
-        };
-        return { planType: rl.plan_type || '', capturedAt, primary: win(rl.primary), secondary: win(rl.secondary) };
-      }
-    } catch { /* 下一个文件 */ }
-  }
-  return null;
-}
-
-// Claude Code 官方限额窗口（和它 /usage 面板同源）：5h 滚动窗口 + 周配额的百分比和重置时间。
-// 本地 jsonl 只有 token 流水、推不出官方百分比，必须拿 Claude Code 自己的 OAuth token
-// （macOS 在 Keychain，其他平台落在 ~/.claude/.credentials.json）查官方 usage 接口。
-// 这是本服务唯一的出网请求，只发往 api.anthropic.com——Claude Code 平时也在发同一个请求。
-async function claudeOAuthToken() {
-  const pick = (raw) => {
-    const o = JSON.parse(raw).claudeAiOauth;
-    return o && o.accessToken && (!o.expiresAt || o.expiresAt > Date.now()) ? o.accessToken : null;
-  };
-  if (PLATFORM === 'darwin') {
-    try {
-      const out = await new Promise((resolve, reject) => {
-        execFile('security', ['find-generic-password', '-s', 'Claude Code-credentials', '-w'],
-          { timeout: 3000 }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
-      });
-      const t = pick(out);
-      if (t) return t;
-    } catch { /* 落到凭证文件 */ }
-  }
-  try { return pick(await fsp.readFile(path.join(HOME, '.claude', '.credentials.json'), 'utf8')); }
-  catch { return null; }
-}
-
-// 终端启动时 curl 自己会认 http_proxy 等环境变量；但打包 App 从 Finder/Dock 启动没有这些变量，
-// curl 直连 api.anthropic.com 会被 403 地域拦截。此时读 macOS 系统代理（Clash 等都会写进去）兜底。
-async function curlSysProxyLine() {
-  if (['https_proxy', 'HTTPS_PROXY', 'http_proxy', 'HTTP_PROXY', 'all_proxy', 'ALL_PROXY'].some((k) => process.env[k])) return '';
-  if (PLATFORM !== 'darwin') return '';
-  try {
-    const out = await new Promise((resolve, reject) => {
-      execFile('scutil', ['--proxy'], { timeout: 3000 }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
-    });
-    const grab = (k) => (out.match(new RegExp(`\\b${k} : (\\S+)`)) || [])[1];
-    if (grab('HTTPSEnable') === '1') return `proxy = "http://${grab('HTTPSProxy')}:${grab('HTTPSPort')}"\n`;
-    if (grab('HTTPEnable') === '1') return `proxy = "http://${grab('HTTPProxy')}:${grab('HTTPPort')}"\n`;
-    if (grab('SOCKSEnable') === '1') return `proxy = "socks5h://${grab('SOCKSProxy')}:${grab('SOCKSPort')}"\n`;
-  } catch { /* 读不到就直连 */ }
-  return '';
-}
-
-async function claudeOfficialLimits() {
-  const token = await claudeOAuthToken();
-  if (!token) return null;
-  // 不用 Node https：该接口的防护按 TLS 指纹拦——同样的请求头 curl 能 200、Node 直接 403。
-  // 走系统 curl（macOS/Win10+ 自带），顺带继承用户的代理环境变量；
-  // token 经 stdin 的 curl 配置传入，不暴露在进程列表里
-  const proxyLine = await curlSysProxyLine();
-  const body = await new Promise((resolve, reject) => {
-    const cp = execFile('curl', ['-sS', '--max-time', '8', '-K', '-', 'https://api.anthropic.com/api/oauth/usage'],
-      { timeout: 10000 }, (err, stdout) => (err ? reject(err) : resolve(stdout)));
-    cp.stdin.end(`${proxyLine}header = "Authorization: Bearer ${token}"\nheader = "anthropic-beta: oauth-2025-04-20"\n`);
-  });
-  const d = JSON.parse(body);
-  const win = (w) => (w && w.utilization != null)
-    ? { usedPercent: w.utilization, resetsAt: w.resets_at ? Math.floor(Date.parse(w.resets_at) / 1000) : 0 }
-    : null;
-  const fiveHour = win(d.five_hour), sevenDay = win(d.seven_day);
-  return (fiveHour || sevenDay) ? { fiveHour, sevenDay } : null;
-}
-
-// ---------- Agent 项目（最近被 coding agent 处理过的项目文件夹）----------
-// Claude Code：~/.claude/projects/<munge过的路径>/*.jsonl，目录名不可逆，但行里带 "cwd":"真实路径"
-// Codex：~/.codex/sessions/**/rollout-*.jsonl 开头的 session_meta 带 cwd
-let agentProjCache = { at: 0, data: null };
+let codexProjectCache = { at: 0, data: null };
 
 async function readCwdFromHead(file, bytes) {
   const fh = await fsp.open(file, 'r');
@@ -1440,35 +1243,15 @@ async function readCwdFromHead(file, bytes) {
   } finally { await fh.close(); }
 }
 
-async function agentProjects(force = false) {
-  if (!force && agentProjCache.data && Date.now() - agentProjCache.at < 60000) return agentProjCache.data;
+async function codexProjects(force = false) {
+  if (!force && codexProjectCache.data && Date.now() - codexProjectCache.at < 60000) return codexProjectCache.data;
   const cutoff = Date.now() - 30 * 86400000;
-  const map = new Map(); // cwd -> { lastActive, agents: Set }
-  const add = (cwd, t, agent) => {
+  const map = new Map(); // cwd -> lastActive
+  const add = (cwd, t) => {
     if (!cwd || cwd === HOME) return; // 在家目录裸跑的会话不算「项目」
-    const cur = map.get(cwd) || { lastActive: 0, agents: new Set() };
-    cur.lastActive = Math.max(cur.lastActive, t);
-    cur.agents.add(agent);
-    map.set(cwd, cur);
+    map.set(cwd, Math.max(map.get(cwd) || 0, t));
   };
-  // Claude Code：每个项目目录取最新的 jsonl，从文件头抓 cwd
-  try {
-    const dirs = await fsp.readdir(CLAUDE_PROJ);
-    await Promise.all(dirs.map(async (d) => {
-      const base = path.join(CLAUDE_PROJ, d);
-      let names; try { names = await fsp.readdir(base); } catch { return; }
-      let newest = null;
-      await Promise.all(names.filter((n) => n.endsWith('.jsonl')).map(async (n) => {
-        try {
-          const st = await fsp.stat(path.join(base, n));
-          if (!newest || st.mtimeMs > newest.mtimeMs) newest = { fp: path.join(base, n), mtimeMs: st.mtimeMs };
-        } catch { /* */ }
-      }));
-      if (!newest || newest.mtimeMs < cutoff) return;
-      try { add(await readCwdFromHead(newest.fp, 65536), newest.mtimeMs, 'claude'); } catch { /* */ }
-    }));
-  } catch { /* 没用过 Claude Code */ }
-  // Codex：最近改动的 rollout 文件头部抓 cwd（数量封顶，控制 IO）
+  // 最近改动的 rollout 文件头部带 cwd；数量封顶以控制 IO。
   try {
     const files = [];
     const walk = async (dir, depth) => {
@@ -1485,334 +1268,19 @@ async function agentProjects(force = false) {
     await walk(CODEX_SESS, 0);
     files.sort((a, b) => b.mtimeMs - a.mtimeMs);
     await Promise.all(files.slice(0, 40).map(async (f) => {
-      try { add(await readCwdFromHead(f.fp, 16384), f.mtimeMs, 'codex'); } catch { /* */ }
+      try { add(await readCwdFromHead(f.fp, 16384), f.mtimeMs); } catch { /* */ }
     }));
   } catch { /* 没用过 Codex */ }
   // 按最近活跃排序，已被删除的项目目录剔掉
-  const sorted = [...map.entries()].sort((a, b) => b[1].lastActive - a[1].lastActive);
+  const sorted = [...map.entries()].sort((a, b) => b[1] - a[1]);
   const projects = [];
-  for (const [cwd, info] of sorted) {
+  for (const [cwd, lastActive] of sorted) {
     if (projects.length >= 12) break;
     try { if (!(await fsp.stat(cwd)).isDirectory()) continue; } catch { continue; }
-    projects.push({ path: cwd, name: path.basename(cwd), agents: [...info.agents], lastActive: info.lastActive });
+    projects.push({ path: cwd, name: path.basename(cwd), lastActive });
   }
   const data = { ok: true, projects };
-  agentProjCache = { at: Date.now(), data };
-  return data;
-}
-
-// ---------- Skills 透视（本机 agent skills 的扫描 / 触发统计 / 健康检查 / 启停）----------
-// 扫描五类来源：~/.claude/skills、最近 agent 项目的 .claude/skills、Claude 插件、
-// ~/.codex/skills、~/.agents/skills。触发统计读两家的会话日志。
-// 启停不走 skillOverrides（官方 #50631：用户级配置当前不生效）——用「移入 _disabled/ 子目录」
-// 实现：两家 CLI 都只扫一层目录，移进去立即对模型不可见，移回来即恢复，可靠且可逆。
-const CLAUDE_SKILLS = path.join(HOME, '.claude', 'skills');
-const CODEX_SKILLS = path.join(HOME, '.codex', 'skills');
-const AGENTS_SKILLS = path.join(HOME, '.agents', 'skills');
-const SKILL_DESC_CUT = 1536; // Claude Code 单条 description 的截断线（官方文档）
-const SKILL_BUDGET_CHARS = 15000; // 描述总预算的社区实测估算值（窗口的 1%），仅作预警参考
-let skillsCache = { at: 0, data: null };
-
-function skillFrontmatter(txt) {
-  const m = txt.match(/^---\s*\r?\n([\s\S]*?)\r?\n---/);
-  if (!m) return null;
-  const fm = m[1];
-  // 不用 m 标志：$ 必须是整段 frontmatter 的末尾，否则块标量（description: >- 换行缩进正文）会被截成空
-  const dm = fm.match(/(?:^|\r?\n)description\s*:\s*([\s\S]*?)(?=\r?\n[\w-]+\s*:|\s*$)/);
-  let desc = dm ? dm[1].trim() : '';
-  desc = desc.replace(/^[|>][+-]?\s*/, '').replace(/^(['"])([\s\S]*)\1$/, '$2').trim();
-  return { desc };
-}
-
-async function scanSkillRoot(root, source, label, out, disabled = false) {
-  let names;
-  try { names = await fsp.readdir(root, { withFileTypes: true }); } catch { return; }
-  for (const n of names) {
-    if (n.name.startsWith('.') || n.name === '_archive' || n.name === '_backups') continue;
-    const fp = path.join(root, n.name);
-    if (n.name === '_disabled') {
-      if (n.isDirectory() && !disabled) await scanSkillRoot(fp, source, label, out, true);
-      continue;
-    }
-    let isDir = n.isDirectory();
-    if (!isDir && n.isSymbolicLink()) { // skills.sh 等安装器常用软链，跟随解析
-      try { isDir = (await fsp.stat(fp)).isDirectory(); } catch { continue; }
-    }
-    if (!isDir) {
-      if (/\.md$/i.test(n.name)) continue; // 根目录的说明文档不算残留
-      out.push({ name: n.name, dir: fp, source, label, disabled, residue: true, desc: '', descLen: 0, mtime: 0,
-        issues: ['残留文件——不是有效 skill，只占目录'] });
-      continue;
-    }
-    const item = { name: n.name, dir: fp, source, label, disabled, residue: false, desc: '', descLen: 0, mtime: 0, issues: [] };
-    try {
-      const sm = path.join(fp, 'SKILL.md');
-      const st = await fsp.stat(sm);
-      item.mtime = st.mtimeMs;
-      const fh = await fsp.open(sm, 'r');
-      let head;
-      try {
-        const buf = Buffer.alloc(Math.min(st.size, 32768));
-        const { bytesRead } = await fh.read(buf, 0, buf.length, 0);
-        head = buf.toString('utf8', 0, bytesRead);
-      } finally { await fh.close(); }
-      const fm = skillFrontmatter(head);
-      if (!fm || !fm.desc) {
-        item.issues.push('SKILL.md 缺 frontmatter description——模型的技能清单里看不到它，只能手动调用');
-      } else {
-        item.desc = fm.desc.slice(0, 240);
-        item.descLen = fm.desc.length;
-        if (fm.desc.length > SKILL_DESC_CUT) {
-          item.issues.push(`description ${fm.desc.length.toLocaleString()} 字符，超过 ${SKILL_DESC_CUT} 截断线——第 ${SKILL_DESC_CUT} 字符之后的触发词模型看不见`);
-        }
-      }
-    } catch {
-      item.residue = true;
-      item.issues.push('缺 SKILL.md——不是有效 skill');
-    }
-    out.push(item);
-  }
-}
-
-// Claude Code 触发统计：jsonl 里的 Skill tool_use（模型自动触发）+ <command-name>（用户手动 /调用）
-const claudeSkillStatCache = new Map(); // file -> { offset, events: [{t, skill}] }
-async function claudeSkillEvents(cutoff) {
-  const files = [];
-  let dirs;
-  try { dirs = await fsp.readdir(CLAUDE_PROJ); } catch { return []; }
-  await Promise.all(dirs.map(async (d) => {
-    let names;
-    try { names = await fsp.readdir(path.join(CLAUDE_PROJ, d)); } catch { return; }
-    await Promise.all(names.filter((n) => n.endsWith('.jsonl')).map(async (n) => {
-      const fp = path.join(CLAUDE_PROJ, d, n);
-      try { const st = await fsp.stat(fp); if (st.mtimeMs >= cutoff) files.push({ fp, st }); } catch { /* */ }
-    }));
-  }));
-  const live = new Set(files.map((f) => f.fp));
-  for (const k of claudeSkillStatCache.keys()) { if (!live.has(k)) claudeSkillStatCache.delete(k); }
-  const all = [];
-  for (const { fp, st } of files) {
-    let c = claudeSkillStatCache.get(fp);
-    if (!c) { c = { offset: 0, events: [] }; claudeSkillStatCache.set(fp, c); }
-    if (st.size < c.offset) { c.offset = 0; c.events = []; }
-    if (st.size > c.offset) {
-      try {
-        const fh = await fsp.open(fp, 'r');
-        let chunk;
-        try {
-          const buf = Buffer.alloc(st.size - c.offset);
-          await fh.read(buf, 0, buf.length, c.offset);
-          chunk = buf.toString('utf8');
-        } finally { await fh.close(); }
-        const lastNL = chunk.lastIndexOf('\n');
-        if (lastNL !== -1) {
-          c.offset += Buffer.byteLength(chunk.slice(0, lastNL + 1), 'utf8');
-          for (const line of chunk.slice(0, lastNL).split('\n')) {
-            const isTool = line.includes('"name":"Skill"');
-            const isCmd = line.includes('<command-name>');
-            if (!isTool && !isCmd) continue;
-            const t = Date.parse((line.match(/"timestamp":"([^"]+)"/) || [])[1] || '') || st.mtimeMs;
-            if (isTool) {
-              let d; try { d = JSON.parse(line); } catch { continue; }
-              const content = d && d.message && Array.isArray(d.message.content) ? d.message.content : [];
-              for (const it of content) {
-                if (it.type === 'tool_use' && it.name === 'Skill' && it.input && it.input.skill) {
-                  c.events.push({ t, skill: String(it.input.skill).replace(/^.*:/, '') });
-                }
-              }
-            } else {
-              const m = line.match(/<command-name>\s*\/?([\w.:-]+)\s*<\/command-name>/);
-              if (m) c.events.push({ t, skill: m[1].replace(/^.*:/, '') });
-            }
-          }
-        }
-      } catch { /* 单文件坏不挡整体 */ }
-    }
-    all.push(...c.events);
-  }
-  return all.filter((e) => e.t >= cutoff);
-}
-
-// Codex 触发统计：rollout 里被激活的 skill 以 "<skill>\n<name>X</name>" 注入——按「会话×skill」去重计数
-const codexSkillStatCache = new Map(); // file -> { size, skills: [{t, skill}] }
-async function codexSkillEvents(cutoff) {
-  const files = [];
-  const walk = async (dir, depth) => {
-    let names;
-    try { names = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
-    for (const n of names) {
-      const fp = path.join(dir, n.name);
-      if (n.isDirectory() && depth < 3) await walk(fp, depth + 1);
-      else if (n.isFile() && n.name.endsWith('.jsonl')) {
-        try { const st = await fsp.stat(fp); if (st.mtimeMs >= cutoff) files.push({ fp, st }); } catch { /* */ }
-      }
-    }
-  };
-  await walk(CODEX_SESS, 0);
-  const live = new Set(files.map((f) => f.fp));
-  for (const k of codexSkillStatCache.keys()) { if (!live.has(k)) codexSkillStatCache.delete(k); }
-  const all = [];
-  for (const { fp, st } of files) {
-    let c = codexSkillStatCache.get(fp);
-    if (!c || c.size !== st.size) {
-      c = { size: st.size, skills: [] };
-      try {
-        const txt = await fsp.readFile(fp, 'utf8');
-        const seen = new Set();
-        const re = /<skill>\\n<name>([\w.:-]+)<\/name>/g;
-        let m;
-        while ((m = re.exec(txt))) {
-          if (seen.has(m[1])) continue;
-          seen.add(m[1]);
-          c.skills.push({ t: st.mtimeMs, skill: m[1] });
-        }
-      } catch { /* */ }
-      codexSkillStatCache.set(fp, c);
-    }
-    all.push(...c.skills);
-  }
-  return all;
-}
-
-async function skillsData(opts = {}) {
-  const { force = false, extraCwds = [] } = opts;
-  if (!force && skillsCache.data && Date.now() - skillsCache.at < 30000) return skillsCache.data;
-  const cutoff = Date.now() - 45 * 86400000;
-  const items = [];
-  await scanSkillRoot(CLAUDE_SKILLS, 'claude', '~/.claude', items);
-  await scanSkillRoot(CODEX_SKILLS, 'codex', '~/.codex', items);
-  await scanSkillRoot(AGENTS_SKILLS, 'agents', '~/.agents', items);
-  // Claude 插件自带的 skills
-  try {
-    const inst = JSON.parse(await fsp.readFile(path.join(HOME, '.claude', 'plugins', 'installed_plugins.json'), 'utf8'));
-    for (const [key, arr] of Object.entries(inst.plugins || {})) {
-      for (const p of arr || []) {
-        if (p.installPath) await scanSkillRoot(path.join(p.installPath, 'skills'), 'plugin', key.split('@')[0], items);
-      }
-    }
-  } catch { /* 没装插件 */ }
-  // 最近 agent 项目的项目级 skills
-  const seenCwds = new Set();
-  try {
-    const pj = await agentProjects(force);
-    for (const p of pj.projects || []) {
-      seenCwds.add(p.path);
-      await scanSkillRoot(path.join(p.path, '.claude', 'skills'), 'project', p.name, items);
-    }
-  } catch { /* */ }
-  // 额外追加扫描当前浏览目录（不在最近12个项目里也能看到）
-  for (const cwd of extraCwds) {
-    if (!cwd || seenCwds.has(cwd)) continue;
-    try {
-      if ((await fsp.stat(cwd)).isDirectory()) {
-        await scanSkillRoot(path.join(cwd, '.claude', 'skills'), 'project', path.basename(cwd), items);
-      }
-    } catch { /* */ }
-  }
-
-  // 触发统计合并（按 skill 名聚合两端事件）
-  const [ce, xe] = await Promise.all([
-    claudeSkillEvents(cutoff).catch(() => []),
-    codexSkillEvents(cutoff).catch(() => []),
-  ]);
-  const stats = new Map();
-  for (const e of [...ce, ...xe]) {
-    const s = stats.get(e.skill) || { hits: 0, last: 0 };
-    s.hits++; s.last = Math.max(s.last, e.t);
-    stats.set(e.skill, s);
-  }
-  // 跨来源副本：同名 skill 出现在几处
-  const copies = new Map();
-  for (const it of items) {
-    if (it.residue) continue;
-    const arr = copies.get(it.name) || [];
-    arr.push(it.label + '/skills' + (it.disabled ? '/_disabled' : ''));
-    copies.set(it.name, arr);
-  }
-  for (const it of items) {
-    const st = stats.get(it.name);
-    it.hits = st ? st.hits : 0;
-    it.last = st ? st.last : 0;
-    const cp = copies.get(it.name) || [];
-    it.copies = cp.length > 1 ? cp : null;
-  }
-  // 预算：每个 Claude 会话都常驻的部分（全局 + 插件）；项目级只在对应项目生效，不计入
-  let budgetChars = 0;
-  for (const it of items) {
-    if (!it.disabled && !it.residue && (it.source === 'claude' || it.source === 'plugin')) budgetChars += it.descLen;
-  }
-  const enabled = items.filter((it) => !it.disabled && !it.residue);
-  const data = {
-    ok: true, at: Date.now(),
-    items,
-    roots: { claude: CLAUDE_SKILLS, codex: CODEX_SKILLS, agents: AGENTS_SKILLS },
-    overview: {
-      total: items.filter((it) => !it.residue).length,
-      unique: new Set(items.filter((it) => !it.residue).map((it) => it.name)).size,
-      active: enabled.filter((it) => it.hits > 0).length,
-      totalHits: enabled.reduce((a, b) => a + b.hits, 0),
-      dust: enabled.filter((it) => it.hits === 0).length,
-      issues: items.filter((it) => it.issues.length).length,
-      budgetChars, budgetLimit: SKILL_BUDGET_CHARS, descCut: SKILL_DESC_CUT,
-    },
-  };
-  skillsCache = { at: Date.now(), data };
-  return data;
-}
-
-// 启停/卸载的路径校验：只允许动「最近一次扫描出来的 skill 目录」，杜绝任意路径移动/删除
-async function validateSkillDir(dir) {
-  if (!skillsCache.data) await skillsData();
-  const target = path.resolve(String(dir || ''));
-  const it = (skillsCache.data.items || []).find((x) => x.dir === target);
-  if (!it) return { ok: false, error: '不在已扫描的 skills 清单里' };
-  return { ok: true, item: it };
-}
-
-async function skillToggle(dir, enable) {
-  const v = await validateSkillDir(dir);
-  if (!v.ok) return v;
-  const it = v.item;
-  if (it.residue) return { ok: false, error: '残留文件不能启停，请直接清理' };
-  if (!!enable === !it.disabled) return { ok: true, dir: it.dir }; // 已是目标状态
-  const root = it.disabled ? path.dirname(path.dirname(it.dir)) : path.dirname(it.dir);
-  const dest = enable ? path.join(root, it.name) : path.join(root, '_disabled', it.name);
-  try {
-    if (!enable) await fsp.mkdir(path.join(root, '_disabled'), { recursive: true });
-    await fsp.access(dest).then(() => { throw new Error('目标位置已有同名目录'); }, () => {});
-    // skills.sh 等安装器装的是相对路径 symlink（../../.agents/...）——直接 rename 会因层级变化断链，
-    // 改为解析出绝对目标后删旧链建新链；真实目录才走 rename
-    const lst = await fsp.lstat(it.dir);
-    if (lst.isSymbolicLink()) {
-      const target = await fsp.realpath(it.dir);
-      await fsp.unlink(it.dir);
-      await fsp.symlink(target, dest);
-    } else {
-      await fsp.rename(it.dir, dest);
-    }
-  } catch (e) { return { ok: false, error: e.message }; }
-  skillsCache = { at: 0, data: null };
-  return { ok: true, dir: dest };
-}
-
-async function skillTrash(dir) {
-  const v = await validateSkillDir(dir);
-  if (!v.ok) return v;
-  const r = await trashPath(v.item.dir);
-  if (r.ok) skillsCache = { at: 0, data: null };
-  return r;
-}
-
-async function agentUsage() {
-  if (usageResultCache.data && Date.now() - usageResultCache.at < 30000) return usageResultCache.data;
-  const [claude, codex, claudeLimits] = await Promise.all([
-    claudeUsage().catch(() => null),
-    codexUsage().catch(() => null),
-    claudeOfficialLimits().catch(() => null),
-  ]);
-  const claudeOut = (claude || claudeLimits) ? { ...(claude || {}), official: claudeLimits } : null;
-  const data = { ok: true, at: Date.now(), claude: claudeOut, codex };
-  usageResultCache = { at: Date.now(), data };
+  codexProjectCache = { at: Date.now(), data };
   return data;
 }
 
@@ -1962,57 +1430,8 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       return sendJSON(res, 200, await createEntry(b.path, b.name, b.type));
     }
-    if (p === '/api/agents') {
-      // coding agent 启动按钮（#38）：GET 回配置，POST 存设置面板勾选的 enabledAgents
-      // enabled = 面板勾选的内置 agent id；custom = config.json 手写的 agents 数组（同 id 覆盖内置命令，新 id 追加）
-      if (req.method === 'POST') {
-        const b = await readBody(req);
-        const enabled = (Array.isArray(b.enabled) ? b.enabled : [])
-          .filter((x) => typeof x === 'string' && /^[\w-]{1,32}$/.test(x)).slice(0, 32);
-        await updateConfig((c) => { c.enabledAgents = enabled; });
-        return sendJSON(res, 200, { ok: true, enabled });
-      }
-      const cfg = await readConfig();
-      const custom = (Array.isArray(cfg.agents) ? cfg.agents : [])
-        .filter((a) => a && typeof a.id === 'string' && a.id && typeof a.cmd === 'string' && a.cmd);
-      return sendJSON(res, 200, { enabled: Array.isArray(cfg.enabledAgents) ? cfg.enabledAgents : null, custom });
-    }
-    if (p === '/api/agents/which') {
-      // 装没装探测：bins 走登录 shell command -v；apps 是桌面应用，走 open -Ra
-      const out = {};
-      const bins = String(url.searchParams.get('bins') || '').split(',')
-        .map((s) => s.trim()).filter((s) => /^[A-Za-z0-9._-]{1,64}$/.test(s)).slice(0, 32);
-      const apps = String(url.searchParams.get('apps') || '').split(',')
-        .map((s) => s.trim()).filter((s) => /^[\w .-]{1,64}$/.test(s)).slice(0, 32);
-      await Promise.all([
-        ...bins.map(async (b) => { out[b] = !!(await findAgentBin(b)); }),
-        ...apps.map((a) => new Promise((resolve) => {
-          execFile('/usr/bin/open', ['-Ra', a], { timeout: 8000 }, (err) => { out[a] = !err; resolve(); });
-        })),
-      ]);
-      return sendJSON(res, 200, out);
-    }
-    if (p === '/api/agent-projects') {
-      return sendJSON(res, 200, await agentProjects());
-    }
-    if (p === '/api/skills') {
-      return sendJSON(res, 200, await skillsData());
-    }
-    if (p === '/api/skills/refresh' && req.method === 'POST') {
-      const b = await readBody(req);
-      const extraCwds = b && b.cwd ? [b.cwd] : [];
-      return sendJSON(res, 200, await skillsData({ force: true, extraCwds }));
-    }
-    if (p === '/api/skills/toggle' && req.method === 'POST') {
-      const b = await readBody(req);
-      return sendJSON(res, 200, await skillToggle(b.dir, !!b.enable));
-    }
-    if (p === '/api/skills/trash' && req.method === 'POST') {
-      const b = await readBody(req);
-      return sendJSON(res, 200, await skillTrash(b.dir));
-    }
-    if (p === '/api/agent-usage') {
-      return sendJSON(res, 200, await agentUsage());
+    if (p === '/api/codex-projects') {
+      return sendJSON(res, 200, await codexProjects());
     }
     if (p === '/api/favorites') {
       if (req.method === 'POST') {

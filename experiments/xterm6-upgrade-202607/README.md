@@ -30,4 +30,4 @@
 4. 6.0 是大版本，过一遍上游 release notes / 迁移说明，重点核对：
    - `allowProposedApi`、`unicode.activeVersion`、`minimumContrastRatio`、`macOptionClickForcesSelection` 等现用 options 是否有变
    - 主终端的 xterm 创建路径要测
-5. 回归测试：中文输入法候选词、claude/codex TUI 重绘、滚动到底、⌘+/- 字号缩放、换肤。
+5. 回归测试：中文输入法候选词、Codex TUI 重绘、滚动到底、⌘+/- 字号缩放、换肤。

@@ -1,3 +1,9 @@
+<!--
+[INPUT]: 依赖 macOS Spotlight、LaunchServices 和 Electron 应用安装行为
+[OUTPUT]: 对外提供 FanBox 启动台与 Spotlight 索引问题的排查记录
+[POS]: docs 的系统级故障档案，保存历史验证证据与处理步骤
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+-->
 # Spotlight 索引 + 启动台搜不到 App 排查记录
 
 > 记录时间：2026-06-13
@@ -52,7 +58,7 @@
 
 - `server.js:345` 注释明确：「Spotlight（mdfind）内容搜索：白嫖系统索引」——只调 `mdfind` **查询**索引，给文件搜索功能用。
 - `electron/main.js:395` 只是提到 Spotlight 会扫文件。
-- 全项目（排除 vendor）搜 `mdutil` / `metadata_never_index` / `.Spotlight-V100` 的**唯一命中**是 `.claude/settings.local.json`——那是**本次调试**我跑命令被记进的权限白名单，不是 app 代码。
+- 全项目（排除 vendor）搜 `mdutil` / `metadata_never_index` / `.Spotlight-V100` 的**唯一命中**来自本次调试工具写入的本地权限白名单，不是 app 代码。
 - `mdfind` 是纯只读查询命令，**不可能**关闭 / 损坏 / 重置索引。
 
 **最可能的真实诱因**：前两天高强度反复构建（electron-builder 反复生成/删除 `node_modules`、`dist` 里 110MB DMG、签名、跑 app）制造海量文件变动（fsevents churn），`mds_stores` 索引进程在高强度抖动下卡进错误状态 → `unknown`。属构建活动副作用，非安装包植入。
@@ -71,7 +77,7 @@
 | 5 | 系统设置 → Spotlight 隐私：加「Data」卷再移除（强制重置） | ❌ Data 仍 `unknown`，没推动 |
 | 6 | **问题 A 修复**：退 DMG + `lsregister -u` 注销 dist 产物 + `lsregister -f` 重新注册 `/Applications` 两个 app + `killall Dock` | ✅ **成功**，FanBox 重新出现在启动台 |
 
-> 注：sudo 命令必须在**真正的「终端」App** 里手动跑——Claude Code 的 `!` 前缀和工具调用都没有 TTY，`sudo` 无法读取密码。
+> 注：sudo 命令必须在**真正的「终端」App** 里手动跑——没有 TTY 的工具调用无法让 `sudo` 读取密码。
 
 ---
 

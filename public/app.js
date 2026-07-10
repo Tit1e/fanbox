@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 index.html DOM、i18n.js、服务端 HTTP API、xterm/Monaco/Milkdown 浏览器全局对象和 Electron preload 桥接
- * [OUTPUT]: 对外提供 FanBox 文件管理、预览编辑、内嵌终端、文件变更时间轴、agent 和全局交互
+ * [OUTPUT]: 对外提供 FanBox 文件管理、预览编辑、内嵌终端、文件变更时间轴、Codex 和全局交互
  * [POS]: public 模块的渲染层主入口，集中编排页面状态、视图和桌面能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -1246,7 +1246,7 @@ async function enterEditMode(e) {
     const r = await apiPost('/api/write', { path: e.path, content, expectedMtime: force ? 0 : baseMtime });
     if (r.conflict) {
       paused = true;
-      const ok = await confirmDialog('文件已被外部修改（可能是 agent 改的）。覆盖会丢掉外部改动，确定覆盖？');
+      const ok = await confirmDialog('文件已被外部修改（可能是 Codex 改的）。覆盖会丢掉外部改动，确定覆盖？');
       paused = false;
       if (ok) return doSave(true);
       saving = false; statusHeld = true; setStatus('未保存：文件被外部修改');
@@ -1353,7 +1353,7 @@ async function mdEditor(e, data, mode = 'rich') {
     const r = await apiPost('/api/write', { path: e.path, content, expectedMtime: force ? 0 : baseMtime });
     if (r.conflict) {
       paused = true;
-      const ok = await confirmDialog('文件已被外部修改（可能是 agent 改的）。覆盖会丢掉外部改动，确定覆盖？');
+      const ok = await confirmDialog('文件已被外部修改（可能是 Codex 改的）。覆盖会丢掉外部改动，确定覆盖？');
       paused = false;
       if (ok) return doSave(true);
       setStatus('未保存：文件被外部修改');
@@ -1539,7 +1539,7 @@ const shotTray = {
       <img class="shot-thumb" draggable="true" src="/api/thumb?path=${encodeURIComponent(m.path)}&w=480&v=${m.size}" title="新截图 · 可拖进终端" data-retry="0">
       <div class="shot-info"><div class="shot-name">${escapeHtml(m.name)}</div>
       <div class="shot-acts">
-        <button data-act="term" title="把路径喂给终端里的 agent">→ 终端</button>
+        <button data-act="term" title="把路径喂给终端里的 Codex">→ 终端</button>
         <button data-act="save" title="移动到当前文件夹的 素材/ 子目录">收进素材</button>
         <button data-act="edit" title="圈重点再发">标注</button>
         <button data-act="close" title="不理它也会自己走">✕</button>
@@ -1572,13 +1572,13 @@ const shotTray = {
   dismiss() { clearTimeout(this.timer); if (this.el) { this.el.remove(); this.el = null; } },
 };
 
-// AI 整理：一键在内嵌终端拉起交互式 agent（claude/codex）对话式整理。
-// 翻箱只备料——把整理偏好、过往整理历史、工作约定写成 brief 文件，agent 读完先摊方案，
+// AI 整理：一键在内嵌终端拉起 Codex 对话式整理。
+// 翻箱只备料——把整理偏好、过往整理历史、工作约定写成 brief 文件，Codex 读完先摊方案，
 // 你在终端里对话确认/调整后它才动手；每批移动写回滚日志，想撤销在对话里说一声就行
 async function organizeLaunch(dirPath) {
   const r = await apiPost('/api/organize/launch', { path: dirPath });
   if (!r.ok) { toast(r.error || 'AI 整理启动失败', true); return; }
-  term.runInDir(dirPath, r.cmd, `${r.engine === 'codex' ? 'Codex' : 'Claude'} 已开聊——先摊方案，你点头它才动手`);
+  term.runInDir(dirPath, r.cmd, 'Codex 已开聊——先摊方案，你点头它才动手');
 }
 
 // 发版向导：版本号 + 发布说明（预填 CHANGELOG 的 Unreleased 段）→ 命令序列在内嵌终端跑，每步可见可拦
@@ -1747,8 +1747,8 @@ async function loadRoots() {
   data.roots.forEach((r) => ul.appendChild(navDirLi(r.name, r.path)));
 }
 function renderRootsActive() {
-  // 快速入口 / 收藏 / agent 项目 三个列表统一高亮「当前所在目录」，让用户清楚自己点开/身处哪一项
-  ['#roots-list', '#favs-list', '#agent-projects-list'].forEach((sel) => {
+  // 快速入口 / 收藏 / Codex 项目三个列表统一高亮「当前所在目录」，让用户清楚自己点开/身处哪一项
+  ['#roots-list', '#favs-list', '#codex-projects-list'].forEach((sel) => {
     const ul = $(sel); if (!ul) return;
     ul.querySelectorAll('li').forEach((li) => li.classList.toggle('active', li.dataset.path === state.cwd));
   });
@@ -1783,7 +1783,7 @@ function renderFavs() {
   });
   renderRootsActive(); // 重渲后补一次高亮，让「当前所在的收藏」保持选中态
 }
-// Agent 项目：最近被 Claude Code / Codex 处理过的项目文件夹，从两者的本机会话日志扫出来
+// Codex 项目：从本机 Codex 会话日志发现最近处理过的项目文件夹
 function agoShort(ms) {
   const m = Math.round((Date.now() - ms) / 60000);
   if (m < 2) return '刚刚';
@@ -1791,33 +1791,27 @@ function agoShort(ms) {
   if (m < 1440) return Math.round(m / 60) + ' 时';
   return Math.round(m / 1440) + ' 天';
 }
-async function loadAgentProjects() {
+async function loadCodexProjects() {
   let data;
-  try { data = await api('/api/agent-projects'); } catch { return; }
+  try { data = await api('/api/codex-projects'); } catch { return; }
   const list = (data.projects || []).slice(0, 8);
   // 数据没变就不动 DOM，免得定时刷新把用户展开的子树抹掉
   const sig = JSON.stringify(list);
-  if (sig === loadAgentProjects._sig) return;
-  loadAgentProjects._sig = sig;
-  const ul = $('#agent-projects-list');
+  if (sig === loadCodexProjects._sig) return;
+  loadCodexProjects._sig = sig;
+  const ul = $('#codex-projects-list');
   ul.innerHTML = '';
-  if (!list.length) { ul.innerHTML = '<div class="nav-empty">用 Claude Code / Codex 跑过的项目会出现在这里</div>'; return; }
+  if (!list.length) { ul.innerHTML = '<div class="nav-empty">用 Codex 跑过的项目会出现在这里</div>'; return; }
   list.forEach((pj) => {
     const li = navDirLi(pj.name, pj.path);
-    li.querySelector('.label').title = `${pj.path}\n${pj.agents.join(' + ')} · ${agoShort(pj.lastActive)}前活跃`;
+    li.querySelector('.label').title = `${pj.path}\nCodex · ${agoShort(pj.lastActive)}前活跃`;
     const when = document.createElement('span');
     when.className = 'when';
-    pj.agents.forEach((a) => {
-      const dot = document.createElement('i');
-      dot.className = 'agent-dot ' + a;
-      dot.title = a;
-      when.appendChild(dot);
-    });
     when.append(agoShort(pj.lastActive));
     li.appendChild(when);
     ul.appendChild(li);
   });
-  renderRootsActive(); // 重渲后补一次高亮，让「当前所在的 agent 项目」保持选中态
+  renderRootsActive(); // 重渲后补一次高亮，让「当前所在的 Codex 项目」保持选中态
 }
 
 // ---------- 最近修改 ----------
@@ -1946,12 +1940,12 @@ function maybeShowGuide() {
   ov.innerHTML = `<div class="guide-card">
     <div class="guide-logo">${svgWrap(SVG.box, 'currentColor', 46, true)}</div>
     <h2>欢迎用 FanBox</h2>
-    <p>vibe coding 的驾驶舱——找文件、跑 agent、看它改、随手改，都在一个窗口：</p>
+    <p>Codex 的驾驶舱——找文件、跑 Codex、看它改、随手改，都在一个窗口：</p>
     <ul>
       <li><b>⌘K</b> 全局搜文件和文件夹；<b>⌘↵</b> 把项目直接在编辑器整包打开；<code>内容:关键词</code> 搜文件里的字</li>
-      <li>顶部 <b>终端</b> 按钮开内嵌终端跑 Claude Code 等 agent；<b>把文件/文件夹拖进终端</b> 即插入路径喂给它当上下文</li>
+      <li>顶部 <b>终端</b> 按钮开内嵌终端跑 Codex；<b>把文件/文件夹拖进终端</b> 即插入路径喂给它当上下文</li>
       <li><b>单击</b> 预览，<b>双击</b> 系统打开；预览里 <b>编辑</b> md 走所见即所得、<b>编辑图片</b> 可标注/打码/转格式</li>
-      <li>agent 改了哪些文件，列表实时高亮「改·N」，不用切窗口盯着看</li>
+      <li>Codex 改了哪些文件，列表实时高亮「改·N」，不用切窗口盯着看</li>
     </ul>
     <button id="guide-ok">开始使用</button>
   </div>`;
@@ -2039,146 +2033,42 @@ function bindTerminalResizer() {
   });
 }
 
-// ---------- coding agent 启动按钮（#38：内置注册表 + 设置面板开关 + config 自定义） ----------
-// 三层：① AGENT_REGISTRY 内置 11 个主流 agent（图标在 /assets/agents/）
-//      ② 设置面板（⚙ 滑杆按钮）勾选启用哪些，存 config.json 的 enabledAgents，默认 claude + codex
-//      ③ config.json 的 agents 数组做高级自定义：同 id 覆盖内置命令，新 id 追加按钮
-// app: true 的是桌面应用（无终端 CLI 形态，官方确认），按钮改为 open -a 拉起，检测走 open -Ra
-const AGENT_REGISTRY = [
-  { id: 'claude', label: 'Claude Code', cmd: 'claude --dangerously-skip-permissions', bin: 'claude', install: 'npm install -g @anthropic-ai/claude-code' },
-  { id: 'codex', label: 'Codex', cmd: 'codex', bin: 'codex', install: 'npm install -g @openai/codex' },
-  { id: 'hermes', label: 'Hermes Agent', cmd: 'hermes', bin: 'hermes', install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash' },
-  { id: 'openclaw', label: 'OpenClaw', cmd: 'openclaw', bin: 'openclaw', install: 'npm install -g openclaw' },
-  { id: 'kimi', label: 'Kimi Code', cmd: 'kimi', bin: 'kimi', install: 'curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash' },
-  { id: 'zcode', label: 'ZCode', cmd: 'open -a ZCode', app: 'ZCode', install: 'https://zcode.z.ai （桌面应用，官网下载 dmg）' },
-  { id: 'opencode', label: 'opencode', cmd: 'opencode', bin: 'opencode', install: 'curl -fsSL https://opencode.ai/install | bash' },
-  { id: 'pi', label: 'pi', cmd: 'pi', bin: 'pi', install: 'curl -fsSL https://pi.dev/install.sh | sh' },
-  { id: 'codebuddy', label: 'CodeBuddy', cmd: 'codebuddy', bin: 'codebuddy', install: 'npm install -g @tencent-ai/codebuddy-code' },
-  { id: 'workbuddy', label: 'WorkBuddy', cmd: 'open -a WorkBuddy', app: 'WorkBuddy', install: 'https://codebuddy.cn/work （桌面应用，官网下载）' },
-  { id: 'qoder', label: 'Qoder CLI', cmd: 'qodercli', bin: 'qodercli', install: 'curl -fsSL https://qoder.com/install | bash' },
-];
-const AGENT_DEFAULTS = ['claude', 'codex'];
-const agentState = { enabled: null, custom: [] };
-const agentIconCache = new Map();
-
-async function agentIconHtml(id) {
-  const key = String(id).replace(/[^\w-]/g, '');
-  if (agentIconCache.has(key)) return agentIconCache.get(key);
-  let html = '';
-  try {
-    const r = await fetch(`/assets/agents/${key}.svg`);
-    if (r.ok) { const t = (await r.text()).trim(); if (t.startsWith('<svg') || t.startsWith('<?xml')) html = t; }
-  } catch { /* 没图标走缩写兜底 */ }
-  if (!html) {
-    try {
-      const r = await fetch(`/assets/agents/${key}.png`, { method: 'HEAD' });
-      if (r.ok) html = `<img src="/assets/agents/${key}.png" alt="">`;
-    } catch { /* 同上 */ }
-  }
-  agentIconCache.set(key, html);
-  return html;
-}
-
-async function loadAgents() {
-  try {
-    const r = await api('/api/agents');
-    agentState.enabled = Array.isArray(r.enabled) && r.enabled.length ? r.enabled : null;
-    agentState.custom = Array.isArray(r.custom) ? r.custom : [];
-  } catch { agentState.enabled = null; agentState.custom = []; }
-}
-
-// 生效的按钮清单：面板勾选管显隐；custom 同 id 只覆盖 label/cmd，不影响显隐；custom 新 id 恒显示追加在后
-function activeAgents() {
-  const on = new Set(agentState.enabled || AGENT_DEFAULTS);
-  const byId = new Map(agentState.custom.filter((a) => a && a.id && typeof a.cmd === 'string' && a.cmd).map((a) => [String(a.id), a]));
-  const list = [];
-  for (const a of AGENT_REGISTRY) {
-    const ov = byId.get(a.id); byId.delete(a.id);
-    if (!on.has(a.id)) continue;
-    list.push(ov ? { ...a, label: ov.label || a.label, cmd: ov.cmd } : a);
-  }
-  for (const [id, a] of byId) list.push({ id, label: a.label || id, cmd: a.cmd });
-  return list;
-}
-
-async function renderAgentButtons() {
-  const anchor = $('#agent-config');
-  anchor.parentElement.querySelectorAll('button[data-agent]').forEach((b) => b.remove());
-  for (const a of activeAgents()) {
-    const b = document.createElement('button');
-    b.className = 'agent-launch';
-    b.dataset.agent = a.id;
-    b.id = 'term-' + String(a.id).replace(/[^\w-]/g, '');
-    b.title = a.app ? `打开 ${a.label} 桌面应用（该产品无终端 CLI 形态）` : `启动 ${a.label}：空闲终端就地启动，正跑着任务则新开标签`;
-    b.innerHTML = (await agentIconHtml(a.id)) || `<span class="agent-abbr">${escapeHtml(String(a.label || a.id).slice(0, 2))}</span>`;
-    b.onclick = () => term.launchAgent(a.cmd);
-    anchor.parentElement.insertBefore(b, anchor);
-  }
-}
-
-// 设置面板：勾选即生效；未安装的显示「未装」，点它复制安装命令
-const agentsPop = {
-  el: null, which: null,
+// ---------- Codex 快速启动与终端设置 ----------
+const terminalSettingsPop = {
+  el: null,
   toggle() { if (this.el) this.close(); else this.open(); },
-  close() { if (!this.el) return; this.el.remove(); this.el = null; document.removeEventListener('mousedown', this._out, true); },
+  close() {
+    if (!this.el) return;
+    this.el.remove();
+    this.el = null;
+    document.removeEventListener('mousedown', this._out, true);
+  },
   open() {
-    const on = new Set(agentState.enabled || AGENT_DEFAULTS);
     const pop = document.createElement('div');
-    pop.className = 'agents-pop';
-    pop.innerHTML = `<div class="ap-head">一键启动的 coding agent</div>
-      <div class="ap-list">${AGENT_REGISTRY.map((a) => `
-        <label class="ap-row" data-id="${a.id}">
-          <input type="checkbox" ${on.has(a.id) ? 'checked' : ''}>
-          <span class="ap-ic" data-ic="${a.id}"></span>
-          <span class="ap-name">${escapeHtml(a.label)}</span>
-          <span class="ap-flag" data-flag="${a.id}"></span>
-        </label>`).join('')}</div>
-      <div class="ap-head ap-sub">终端渲染</div>
-      <label class="ap-row" data-webgl title="长时间中文输出偶发乱码时可关掉：改用兼容渲染（DOM），立即生效，稍慢但稳">
+    pop.className = 'terminal-settings-pop';
+    pop.innerHTML = `<div class="tsp-head">终端渲染</div>
+      <label class="tsp-row" title="长时间中文输出偶发乱码时可关掉：改用兼容渲染（DOM），立即生效，稍慢但稳">
         <input type="checkbox" ${(() => { try { return localStorage.getItem('fanbox.noWebgl') === '1' ? '' : 'checked'; } catch { return 'checked'; } })()}>
-        <span class="ap-name">WebGL 加速渲染</span>
-      </label>
-      <div class="ap-foot">勾选即生效 · 点「未装」复制安装命令<br>高级：~/.fanbox/config.json 的 agents 数组可自定义命令 / 加新 agent</div>`;
+        <span>WebGL 加速渲染</span>
+      </label>`;
     document.body.appendChild(pop);
-    const r = $('#agent-config').getBoundingClientRect();
+    const anchor = $('#term-settings');
+    const r = anchor.getBoundingClientRect();
     pop.style.top = Math.round(r.bottom + 6) + 'px';
     pop.style.right = Math.max(8, Math.round(window.innerWidth - r.right - 8)) + 'px';
     this.el = pop;
-    AGENT_REGISTRY.forEach(async (a) => { const el = pop.querySelector(`[data-ic="${a.id}"]`); const ic = await agentIconHtml(a.id); if (el) el.innerHTML = ic || `<span class="agent-abbr">${escapeHtml(a.label.slice(0, 2))}</span>`; });
-    this.markInstalled(pop);
-    const wgCb = pop.querySelector('[data-webgl] input');
-    if (wgCb) wgCb.onchange = () => { term.setWebgl(wgCb.checked); toast(wgCb.checked ? 'WebGL 渲染已开启' : '已切换兼容渲染（修中文乱码）'); };
-    pop.querySelectorAll('.ap-list .ap-row input').forEach((cb) => {
-      cb.onchange = async () => {
-        const ids = [...pop.querySelectorAll('.ap-list .ap-row input:checked')].map((x) => x.closest('.ap-row').dataset.id);
-        agentState.enabled = ids.length ? ids : null;
-        renderAgentButtons();
-        try { await apiPost('/api/agents', { enabled: ids }); } catch { toast('保存失败', true); }
-      };
-    });
-    this._out = (ev) => { if (!pop.contains(ev.target) && !$('#agent-config').contains(ev.target)) this.close(); };
+    pop.querySelector('input').onchange = (ev) => {
+      term.setWebgl(ev.target.checked);
+      toast(ev.target.checked ? 'WebGL 渲染已开启' : '已切换兼容渲染（修中文乱码）');
+    };
+    this._out = (ev) => { if (!pop.contains(ev.target) && !anchor.contains(ev.target)) this.close(); };
     document.addEventListener('mousedown', this._out, true);
-  },
-  async markInstalled(pop) {
-    if (!this.which) {
-      const bins = AGENT_REGISTRY.filter((a) => a.bin).map((a) => a.bin).join(',');
-      const apps = AGENT_REGISTRY.filter((a) => a.app).map((a) => a.app).join(',');
-      try { this.which = await api(`/api/agents/which?bins=${bins}&apps=${encodeURIComponent(apps)}`); } catch { this.which = {}; return; }
-    }
-    for (const a of AGENT_REGISTRY) {
-      const f = pop.querySelector(`[data-flag="${a.id}"]`);
-      if (!f || this.which[a.bin || a.app] !== false) continue;
-      f.textContent = '未装';
-      f.title = '点击复制安装命令：' + a.install;
-      f.onclick = (ev) => { ev.preventDefault(); navigator.clipboard.writeText(a.install).then(() => toast('已复制安装命令')); };
-    }
   },
 };
 
-async function bindAgentButtons() {
-  $('#agent-config').onclick = () => agentsPop.toggle();
-  await loadAgents();
-  await renderAgentButtons();
+function bindCodexControls() {
+  $('#term-codex').onclick = () => term.launchCodex();
+  $('#term-settings').onclick = () => terminalSettingsPop.toggle();
 }
 
 // ---------- 事件绑定 ----------
@@ -2205,7 +2095,7 @@ function bindEvents() {
   $('#btn-recent').onclick = showRecent;
   $('#btn-changes').onclick = () => toggleChangesPanel();
   $('#btn-terminal').onclick = () => term.toggle();
-  bindAgentButtons();
+  bindCodexControls();
   shotTray.init();
   $('#term-newtab').onclick = () => term.newTab();
   $('#term-max').onclick = () => term.toggleMax();
@@ -2387,9 +2277,9 @@ function applyTheme(skin, rerender = true) {
 }
 
 // ---------- 内嵌终端（仅桌面 app；浏览器版优雅降级）----------
-// agent「等你拍板」界面特征（claude code 2.1.x / codex 0.13x 实测文案，宁缺勿滥：
+// Codex「等你拍板」界面特征，宁缺勿滥：
 // 不命中只是退化成「任务完成」标题，不会漏响）
-const TERM_ASK_RE = /(Do you want to (proceed|continue|make this edit|allow|use this)|Would you like to proceed|Ready to code\?|created or one you trust\?|tell (Claude|Codex) what to do differently|Yes, and don't ask again|Allow Codex to (run|apply|create)|Codex wants to|[❯›][ \t]*1\.[ \t]*Yes)/;
+const TERM_ASK_RE = /(Do you want to (proceed|continue|make this edit|allow|use this)|Would you like to proceed|Ready to code\?|created or one you trust\?|tell Codex what to do differently|Yes, and don't ask again|Allow Codex to (run|apply|create)|Codex wants to|[❯›][ \t]*1\.[ \t]*Yes)/;
 const term = {
   sessions: [], seq: 0, active: null, maximized: false,
   dock: localStorage.getItem('fb_term_dock') || 'right',
@@ -2426,7 +2316,7 @@ const term = {
     else this.fitActive();
     $('#btn-terminal').classList.add('active');
     localStorage.setItem('fb_term_open', '1');
-    if (!localStorage.getItem('fb_term_draghint')) { localStorage.setItem('fb_term_draghint', '1'); setTimeout(() => toast('提示：把左侧文件 / 文件夹拖进终端，即插入路径喂给 agent'), 700); }
+    if (!localStorage.getItem('fb_term_draghint')) { localStorage.setItem('fb_term_draghint', '1'); setTimeout(() => toast('提示：把左侧文件 / 文件夹拖进终端，即插入路径喂给 Codex'), 700); }
   },
   close() {
     if (this.maximized) this.toggleMax(false); // 铺满状态下收起终端，term-max 不清会把文件区一起藏没
@@ -2487,9 +2377,9 @@ const term = {
     const write = () => { if (this.active) this.input(this.active, shQuote(p) + ' '); const s = this.sessions.find((x) => x.id === this.active); if (s) s.xterm.focus(); };
     if (wasHidden) setTimeout(write, 280); else write();
   },
-  // 一键在终端启动 coding agent：当前标签是空闲 shell 就地启动；正跑着东西（claude/codex/任何前台程序）
+  // 一键启动 Codex：当前标签是空闲 shell 就地启动；正跑着其他前台程序
   // 则新开标签，不打断也不把命令打进别的程序里
-  async launchAgent(cmd) {
+  async launchCodex() {
     if (!this.available()) { openWith(state.cwd, 'terminal'); return; } // 网页版降级到系统终端
     let sess = null;
     if (this.sessions.length) {
@@ -2498,7 +2388,7 @@ const term = {
       if (cur && !cur.dead && await this.isPlainShell(cur)) sess = cur;
     }
     if (!sess) sess = await this.openInDir(state.cwd); // 等 spawn 完，拿确切 session 写入
-    if (sess && !sess.dead) { this.input(sess.id, cmd + '\r'); sess.xterm.focus(); toast('已在终端启动 ' + cmd); }
+    if (sess && !sess.dead) { this.input(sess.id, 'codex\r'); sess.xterm.focus(); toast('已在终端启动 Codex'); }
     else toast('终端启动失败', true);
   },
   // 在指定目录新开标签跑命令（续会话/发版等）：不复用别处的空闲 shell，目录必须对
@@ -3054,7 +2944,7 @@ const term = {
         } else if (dur > 4000) { // 跑了一会儿的真任务完成：文件区涟漪 + 极轻提示音 + 必要时系统通知
           rippleFileArea();
           playChime('done');
-          if (!document.hasFocus() || s.id !== this.active) this.notify(s, 'agent 任务完成 · ' + (s.title || 'shell'), this.lastReplyExcerpt(s) || (s.title || 'shell') + ' 已空闲');
+          if (!document.hasFocus() || s.id !== this.active) this.notify(s, 'Codex 任务完成 · ' + (s.title || 'shell'), this.lastReplyExcerpt(s) || (s.title || 'shell') + ' 已空闲');
         }
       });
       if (!anyBusy) { clearInterval(this._statusTimer); this._statusTimer = null; }
@@ -3098,7 +2988,7 @@ const term = {
       const dotState = s.dead ? 'dead' : (s.status === 'busy' ? 'busy' : 'idle');
       const followed = follow.on && follow.sid === s.id; // 文件跟随正盯着这个 tab
       t.className = 'term-tab' + (s.id === this.active ? ' active' : '') + (s.unread ? ' unread' : '') + (followed ? ' following' : '');
-      const dotTitle = s.dead ? '进程已退出' : (s.status === 'busy' ? 'agent 运行中' : '空闲');
+      const dotTitle = s.dead ? '进程已退出' : (s.status === 'busy' ? 'Codex 运行中' : '空闲');
       // 终端图标按项目路径染色：同项目同色，和面包屑的配对色点呼应
       const hue = this.hueOf(s.cwd || s.startDir);
       t.title = followed ? '文件跟随正盯着这个终端 · 双击跳到它所在目录' : '双击：文件区跳到该终端所在目录';
@@ -3246,7 +3136,7 @@ function toggleChangesPanel() {
   pop.id = 'changes-pop';
   pop.className = 'changes-pop';
   if (!state.changeLog.length) {
-    pop.innerHTML = '<div class="cp-head">本会话变更</div><div class="cp-empty">还没有捕捉到文件变更。<br>跑起 agent，它改的文件会实时出现在这里。</div>';
+    pop.innerHTML = '<div class="cp-head">本会话变更</div><div class="cp-empty">还没有捕捉到文件变更。<br>跑起 Codex，它改的文件会实时出现在这里。</div>';
   } else {
     const rows = state.changeLog.slice(0, 60).map((c) => {
       const inRepoHint = '';
@@ -3282,7 +3172,7 @@ function toggleChangesPanel() {
 // WOW2 会话回放：像刷视频一样拖时间轴，重现这段时间 agent 一步步改了哪些文件
 function openReplay() {
   const tl = state.changeTimeline.slice();
-  if (tl.length < 2) { toast('变更太少，先让 agent 多改几下再回放', true); return; }
+  if (tl.length < 2) { toast('变更太少，先让 Codex 多改几下再回放', true); return; }
   const t0 = tl[0].ts, t1 = tl[tl.length - 1].ts;
   const span = Math.max(1000, t1 - t0);
   const ov = document.createElement('div');
@@ -3290,7 +3180,7 @@ function openReplay() {
   ov.innerHTML =
     `<div class="replay-panel">
       <div class="replay-head"><span>会话回放 · ${tl.length} 次写入 · 跨 ${fmtDur(span)}</span><button class="replay-close ghost-btn">关闭 (Esc)</button></div>
-      <div class="replay-now"><span class="rn-label">此刻 agent 正在改</span><span class="rn-file" id="replay-now">—</span></div>
+      <div class="replay-now"><span class="rn-label">此刻 Codex 正在改</span><span class="rn-file" id="replay-now">—</span></div>
       <div class="replay-track" id="replay-track"><div class="replay-fill" id="replay-fill"></div><div class="replay-playhead" id="replay-playhead"></div></div>
       <div class="replay-ctl"><button id="replay-play" class="primary">▶ 播放</button><input type="range" id="replay-range" min="0" max="1000" value="1000"><span id="replay-count" class="replay-count"></span></div>
       <div class="replay-list" id="replay-list"></div>
@@ -3391,7 +3281,7 @@ function setFileFollow(on, offMsg) {
   // 桌面有终端却没有活动 tab 时直接拒绝（否则退化成「全文件系统跟随」，正是要根治的乱源）。
   if (on && typeof term !== 'undefined' && term.available()) {
     const sid = term.sessions.some((x) => x.id === term.active) ? term.active : null;
-    if (!sid) { toast('先点开一个终端 tab，跟随才知道盯哪个 agent', true); $('#file-follow')?.classList.remove('on'); return; }
+    if (!sid) { toast('先点开一个终端 tab，跟随才知道盯哪个 Codex 会话', true); $('#file-follow')?.classList.remove('on'); return; }
     follow.sid = sid;
     const s = term.sessions.find((x) => x.id === sid);
     if (s) term.refreshCwd(s, true).catch(() => {}); // 立刻校准 cwd，scope 从第一笔就准（不靠回车后的延迟轮询）
@@ -3408,7 +3298,7 @@ function setFileFollow(on, offMsg) {
   follow.swapping = false; follow.swapDirty = false;
   if (typeof term !== 'undefined') term.renderTabs(); // 给绑定的 tab 标上/撤掉「跟随中」标记
   if (!on) $('#preview-title')?.querySelector('.live-badge')?.remove(); // 留住最后画面，只摘掉「跟随中」
-  toast(on ? (follow.label ? `文件跟随已开 · 盯着「${follow.label}」这个终端` : '文件跟随已开：agent 改哪个文件就看哪个') : (offMsg || '文件跟随已停'));
+  toast(on ? (follow.label ? `文件跟随已开 · 盯着「${follow.label}」这个终端` : '文件跟随已开：Codex 改哪个文件就看哪个') : (offMsg || '文件跟随已停'));
   // 一开就有得看：5 分钟内有过范围内的变更就直接跟上，不用干等 agent 下一笔
   if (on) {
     startFollowNarration(); // 底部过程旁白：实时说 agent 在干嘛
@@ -3431,7 +3321,7 @@ function inFollowScope(full) {
 }
 // 归属硬化：文件事件本身不带「谁写的」，靠「绑定 tab 此刻在不在干活」消歧。
 // 别的 tab 在重叠目录里写东西时，绑定 tab 多半是空闲的，于是这笔不会被误当成它的产出。
-function boundAgentActive() {
+function boundCodexActive() {
   if (!follow.sid || typeof term === 'undefined') return true; // 没绑(浏览器降级)不设此关
   const s = term.sessions.find((x) => x.id === follow.sid);
   if (!s) return false;
@@ -3449,7 +3339,7 @@ function followChange(dir, sub) {
   }
   const full = dir.replace(/\/$/, '') + '/' + sub;
   if (!inFollowScope(full)) return; // 别的项目/别的 App 写的文件，不归这次跟随管
-  if (!boundAgentActive()) return;  // 绑定的 agent 此刻没在干活——这笔多半是别的 tab 写的，不抢屏
+  if (!boundCodexActive()) return;  // 绑定的 Codex 此刻没在干活——这笔多半是别的 tab 写的，不抢屏
   if (full === follow.path) { scheduleFollowRender(); return; }
   if (dirtyCheck || autosaveFlush || imgEditState) return; // 编辑器开着就不抢屏，等用户收工
   // 已排队的目标更值得看（html/md）时，不被低优先级写入顶掉
@@ -3529,7 +3419,7 @@ function followArtifactCard(e) {
     `<div class="empty-state artifact-card">
       <div class="big">${iconSvg(real, 48)}</div>
       <div class="art-name">${escapeHtml(e.name)}</div>
-      <div class="art-sub">agent 刚生成${sizeStr ? ' · ' + sizeStr : ''}</div>
+      <div class="art-sub">Codex 刚生成${sizeStr ? ' · ' + sizeStr : ''}</div>
       <div class="art-btns"><button class="ghost-btn" data-act="reveal">在访达显示</button><button class="ghost-btn" data-act="open">打开</button></div>
     </div>`;
   body.querySelector('[data-act="reveal"]').onclick = () => openWith(e.path, 'reveal');
@@ -3541,12 +3431,12 @@ function followBadge(e) {
   $('#preview-title').innerHTML = `<span class="live-badge${art ? ' done' : ''}"><i></i>${art ? '已生成' : '跟随中'}</span>${where}${escapeHtml(e.name)}`;
 }
 // ===== 阶段二「过程旁白」：结果是主视图，底部一行实时说 agent 此刻在干嘛 =====
-// 工具调用动词 → 人话（Claude Code 2.x 工具行：「⏺ Update(file)」「⏺ Bash(cmd)」「⏺ Web Search(q)」…）
+// Codex 工具调用动词 → 人话
 const ACTION_VERB = { Read: '读', Edit: '写', Update: '写', Write: '写', MultiEdit: '写', NotebookEdit: '写',
   Bash: '跑', Grep: '搜', Glob: '找', Search: '搜', Task: '子任务', TodoWrite: '理清单', Fetch: '抓取' };
 // 从绑定终端的输出尾巴里捞最近一条「干了什么」。尽量稳健：认 ⏺/● 圆点工具行，认 Web Search，
 // 都没有就看是不是在思考（页脚挂着 esc to interrupt）。提炼失败返回空串（旁白只显示文件侧）。
-function latestAgentAction(s) {
+function latestCodexAction(s) {
   const txt = term.tailText(s, 40);
   if (!txt) return '';
   const lines = txt.split('\n');
@@ -3572,7 +3462,7 @@ function renderFollowNarration() {
   if (!follow.on) { el.classList.add('hidden'); el.innerHTML = ''; return; }
   const s = follow.sid && typeof term !== 'undefined' ? term.sessions.find((x) => x.id === follow.sid) : null;
   const busy = !!(s && (s.status === 'busy' || Date.now() - (s.lastData || 0) < 8000));
-  const action = s ? latestAgentAction(s) : '';
+  const action = s ? latestCodexAction(s) : '';
   // 结果已在主视图 + 标题徽标里；这条只说「过程」：优先 agent 的终端动作，
   // 没动作就退回「在写哪个文件」，agent 闲下来则报一句平静的收尾。
   let main, live = busy;
@@ -3580,10 +3470,10 @@ function renderFollowNarration() {
   else if (busy && follow.path) main = (isFollowArtifact(baseOf(follow.path)) ? '生成 ' : '写 ') + baseOf(follow.path);
   else if (action && action !== '思考中…') main = action; // 刚停手，留住最后动作
   // 跟随已开但绑的终端还没写文件：明说「等待…」，别把旁白栏藏起来让用户以为跟随坏了（#30）
-  else { main = follow.path ? '停在 ' + baseOf(follow.path) : (follow.label ? `等待「${follow.label}」写文件…` : '等待 agent 写文件…'); live = false; }
+  else { main = follow.path ? '停在 ' + baseOf(follow.path) : (follow.label ? `等待「${follow.label}」写文件…` : '等待 Codex 写文件…'); live = false; }
   if (!main) { el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
-  const lead = live ? 'agent 正在 ' : '';
+  const lead = live ? 'Codex 正在 ' : '';
   el.innerHTML = `<span class="fn-dot${live ? ' live' : ''}"></span>${escapeHtml(lead)}<span class="fn-term">${escapeHtml(main)}</span>`;
 }
 function startFollowNarration() { stopFollowNarration(); follow.timers.narr = setInterval(renderFollowNarration, 1200); renderFollowNarration(); }
@@ -3847,8 +3737,8 @@ async function init() {
   document.querySelectorAll('#theme-switch .theme-seg button').forEach((b) => { b.onclick = () => applyTheme(b.dataset.skin); });
   await loadRoots();
   await loadFavorites();
-  loadAgentProjects();
-  setInterval(loadAgentProjects, 120000); // agent 项目入口保持新鲜（服务端有 60s 缓存，开销很小）
+  loadCodexProjects();
+  setInterval(loadCodexProjects, 120000); // Codex 项目入口保持新鲜（服务端有 60s 缓存，开销很小）
   await navigate(state.home, false);
   // 恢复上次终端开合状态（dock 方位已由 applyDock 自带记忆）
   if (localStorage.getItem('fb_term_open') === '1' && term.available()) term.open();

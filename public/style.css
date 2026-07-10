@@ -27,7 +27,7 @@
   --radius: 4px; --shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
   --font-display: ui-monospace, "SF Mono", Menlo, monospace; --font-fname: ui-monospace, "SF Mono", Menlo, monospace;
 }
-/* ===== 皮肤 2 · 暖色纸感档案馆（参照 Anthropic 暖色出版）===== */
+/* ===== 皮肤 2 · 暖色纸感档案馆 ===== */
 [data-theme="warm"] {
   --bg: #f5f0e8; --bg-2: #faf6ef; --bg-3: #ece2d2; --panel: #f1ebdf;
   --border: #e3d9c8; --rule: #e3d9c8;
@@ -158,11 +158,8 @@ kbd {
 .nav-list li .twirl { flex-shrink: 0; width: 13px; margin-right: -4px; text-align: center; font-size: 9px; color: var(--text-faint); border-radius: 3px; }
 .nav-list li .twirl:hover { color: var(--accent); background: var(--bg-3); }
 .nav-sub { padding-left: 15px; }
-/* Agent 项目：右侧活跃时间 + agent 圆点 */
+/* Codex 项目：右侧活跃时间 */
 .nav-list li .when { margin-left: auto; flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.agent-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); }
-.agent-dot.claude { background: #d97757; }
-.agent-dot.codex { background: #10a37f; }
 .brand .logo { color: var(--accent); }
 .theme-switch { margin-top: auto; padding: 12px 8px 6px; border-top: 1px solid var(--border); }
 .theme-switch-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 7px; }
@@ -297,8 +294,6 @@ kbd {
 #file-area.fa-narrow .list .row > :nth-child(4) { display: none; }
 #file-area.fa-tight .list .row { grid-template-columns: 30px 1fr 26px; }
 #file-area.fa-tight .list .row > :nth-child(3) { display: none; }
-/* 自定义 agent 启动按钮：没有品牌图标时显示两字缩写 */
-.agent-launch .agent-abbr { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
 
 /* 收藏按钮（悬停出现，可直接收藏，无需先预览） */
 .fav-btn { position: absolute; opacity: 0; transition: 0.12s; cursor: pointer; color: var(--text-faint); font-size: 15px; }
@@ -840,25 +835,18 @@ kbd {
 .term-actions { display: flex; gap: 2px; flex: 0 0 auto; align-items: center; }
 .term-actions button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 2px 7px; border-radius: 5px; line-height: 1; }
 .term-actions button:hover { color: var(--text); background: var(--bg-3); }
-/* 一键启动 agent：官方品牌图标按钮（Claude 珊瑚光芒标 / Codex 官方标） */
-.term-actions .agent-launch { display: inline-flex; align-items: center; justify-content: center; padding: 3px 6px; color: var(--text); }
-.term-actions .agent-launch:hover { background: var(--bg-3); }
-.term-actions .agent-launch svg, .term-actions .agent-launch img { display: block; flex: none; width: 15px; height: 15px; }
-.term-actions .agent-launch + #agent-config { margin-left: 2px; } /* agent 按钮成组，设置入口贴在组尾 */
+/* Codex 一键启动 */
+.term-actions .codex-launch { display: inline-flex; align-items: center; justify-content: center; padding: 3px 6px; color: var(--text); }
+.term-actions .codex-launch:hover { background: var(--bg-3); }
+.term-actions .codex-launch svg, .term-actions .codex-launch img { display: block; flex: none; width: 15px; height: 15px; }
+.term-actions .codex-launch + #term-settings { margin-left: 2px; }
 
-/* agent 启动入口设置面板（#38） */
-.agents-pop { position: fixed; z-index: 200; width: 300px; display: flex; flex-direction: column; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.32); overflow: hidden; }
-.agents-pop .ap-head { padding: 9px 12px; font-size: 12px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border); }
-.agents-pop .ap-head.ap-sub { border-top: 1px solid var(--border); border-bottom: none; }
-.agents-pop .ap-list { overflow-y: auto; max-height: 46vh; padding: 4px 0; }
-.agents-pop .ap-row { display: flex; align-items: center; gap: 9px; padding: 6px 12px; cursor: pointer; font-size: 13px; color: var(--text); }
-.agents-pop .ap-row:hover { background: var(--bg-3); }
-.agents-pop .ap-row input { accent-color: var(--accent); margin: 0; }
-.agents-pop .ap-ic { display: inline-flex; width: 15px; justify-content: center; }
-.agents-pop .ap-ic svg, .agents-pop .ap-ic img { width: 15px; height: 15px; display: block; }
-.agents-pop .ap-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.agents-pop .ap-flag { font-size: 11px; color: var(--yellow); cursor: copy; flex: none; }
-.agents-pop .ap-foot { padding: 8px 12px; font-size: 11px; color: var(--text-dim); border-top: 1px solid var(--border); line-height: 1.7; }
+/* 终端设置只承载渲染选项，与 Codex 启动职责分离 */
+.terminal-settings-pop { position: fixed; z-index: 200; width: 240px; display: flex; flex-direction: column; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,0.32); overflow: hidden; }
+.terminal-settings-pop .tsp-head { padding: 9px 12px; font-size: 12px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+.terminal-settings-pop .tsp-row { display: flex; align-items: center; gap: 9px; padding: 9px 12px; cursor: pointer; font-size: 13px; color: var(--text); }
+.terminal-settings-pop .tsp-row:hover { background: var(--bg-3); }
+.terminal-settings-pop .tsp-row input { accent-color: var(--accent); margin: 0; }
 
 #xterm-host { flex: 1; position: relative; min-height: 0; overflow: hidden; background: var(--bg); }
 /* xterm 6.0 的 Viewport 重写后不再用 JS 把 .xterm-viewport 刷成主题色，xterm.css 默认的 #000

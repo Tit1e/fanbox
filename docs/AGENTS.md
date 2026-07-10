@@ -8,10 +8,8 @@
 04-桌面版路线图-Electron-Monaco.md: Electron 桌面版路线图，确定内嵌终端优先于完整 IDE 的产品边界
 05-验收角色与评分标准.md: 产品验收规范，定义五类用户角色、评分维度与硬否决条件
 06-vendor补丁.md: vendor 补丁档案，记录已退役的 xterm CapsLock 补丁、守卫和退场条件
-09-FanBox-Agent架构设计-记忆上下文自进化.md: Agent 前瞻研究，讨论记忆、上下文与验证式自主进化的候选路线
 10-跨平台移植评估-Windows-Intel-Mac.md: 平台兼容性评估，记录 Intel 构建现状与 Windows 剩余适配清单
-11-可配置-agent-路线图.md: Agent 扩展路线图，区分已落地的启动配置与仍需专门适配的项目发现、整理能力
-AI整理目录-设计方案.md: 已废弃的 AI 整理 v1 方案，保留提案审批与回滚设计的历史背景
+11-Codex单一Agent边界.md: Codex 单一 Agent 边界，约束启动、项目发现、AI 整理和旧配置兼容策略
 Spotlight索引问题排查记录.md: macOS Spotlight 与启动台排障记录，保存验证证据和系统级处理过程
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

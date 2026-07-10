@@ -1,4 +1,4 @@
-# FanBox - Coding Agent 的本地桌面驾驶舱
+# FanBox - Codex 的本地桌面驾驶舱
 Electron 33.4.11 + Node.js >=18 + xterm.js 6.0.0 + node-pty 1.1.0 + 原生 HTML/CSS/JavaScript
 
 <directory>

@@ -1,5 +1,11 @@
+/**
+ * [INPUT]: 依赖 playwright-core、Electron 入口和假 HOME 测试目录
+ * [OUTPUT]: 对外提供终端、通知、Codex 启动、文件定位和服务端安全的综合验收脚本
+ * [POS]: experiments/bugfix-202606 的自动化回归入口，覆盖 2026-06 终端修复
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
 // 2026-06 批量修复的自动化验收：Playwright 驱动 Electron（假 HOME，不碰真实数据，不影响正在跑的翻箱）。
-// 覆盖：①冷启动 PTY 列宽 ②IME CapsLock 双写 ③通知误报四场景 ④标签项目识别/双击定位/Claude 按钮
+// 覆盖：①冷启动 PTY 列宽 ②IME CapsLock 双写 ③通知误报四场景 ④标签项目识别/双击定位/Codex 按钮
 // ⑤滚动失同步（隐藏期灌行后能滚到底）⑥裸文件名回扫定位（带同名诱饵）⑦CSRF Origin 校验。共 16 项断言。
 const { _electron } = require('playwright-core');
 const http = require('http');
@@ -28,7 +34,7 @@ setTimeout(() => { console.error('FAIL: watchdog 超时'); process.exit(2); }, 2
   // ⑥ 定位测试的文件布景：真身在视频项目目录，同名诱饵出现得更早，终端 cwd 与两者无关
   const proj = path.join(HOME, 'Documents/写作/03-视频创作/项目/2026.06-Fable5发布视频');
   const decoy = path.join(HOME, 'Documents/decoy');
-  const cwdDir = path.join(HOME, '.claude/skills/lovart-api');
+  const cwdDir = path.join(HOME, '.codex/skills/lovart-api');
   for (const d of [proj, decoy, cwdDir]) fs.mkdirSync(d, { recursive: true });
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
   fs.writeFileSync(path.join(proj, 'lovart_2ffda3364d71.png'), png);
@@ -102,7 +108,7 @@ setTimeout(() => { console.error('FAIL: watchdog 超时'); process.exit(2); }, 2
     window.__fired.length = 0;
     const S = term.sessions.find((x) => x.id === term.active);
     const iv = setInterval(() => { S.xterm.write('.'); term.markBusy(S); }, 300);
-    setTimeout(() => { clearInterval(iv); S.xterm.write('\r\n Do you want to proceed?\r\n ❯ 1. Yes\r\n   2. No, and tell Claude what to do differently\r\n'); term.markBusy(S); }, 5000);
+    setTimeout(() => { clearInterval(iv); S.xterm.write('\r\n Do you want to proceed?\r\n ❯ 1. Yes\r\n   2. No, and tell Codex what to do differently\r\n'); term.markBusy(S); }, 5000);
   });
   await win.waitForTimeout(5000 + 4500);
   const c = await win.evaluate(() => window.__fired.slice());
@@ -135,18 +141,20 @@ setTimeout(() => { console.error('FAIL: watchdog 超时'); process.exit(2); }, 2
   const cwdNow = await win.evaluate(() => state.cwd);
   check(cwdNow === '/private/tmp' || cwdNow === '/tmp', '双击标签定位文件区', 'state.cwd=' + cwdNow);
 
-  // ---------- ④ Claude 按钮：新开标签 + 带免确认参数 ----------
+  // ---------- ④ Codex 按钮：当前终端忙时新开标签 ----------
   const launch = await win.evaluate(async () => {
+    term.input(term.active, 'sleep 20\r');
+    await new Promise((r) => setTimeout(r, 400));
     const before = term.sessions.length;
     window.__cmds = [];
     const orig = term.input;
     term.input = (id, dd) => window.__cmds.push(dd);
-    document.querySelector('#term-claude').click();
+    document.querySelector('#term-codex').click();
     await new Promise((r) => setTimeout(r, 2500));
     term.input = orig;
     return { before, after: term.sessions.length, cmds: window.__cmds };
   });
-  check(launch.after === launch.before + 1 && launch.cmds.some((x) => x.includes('claude --dangerously-skip-permissions')), 'Claude 按钮新开标签+免确认参数', JSON.stringify(launch));
+  check(launch.after === launch.before + 1 && launch.cmds.some((x) => x.includes('codex')), 'Codex 按钮在忙碌时新开标签', JSON.stringify(launch));
 
   // ---------- ⑤ 滚动失同步：隐藏标签灌 6000 行 → 切回 → 应能滚到底 ----------
   const scroll = await win.evaluate(async () => {
