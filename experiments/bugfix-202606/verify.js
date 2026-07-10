@@ -1,12 +1,13 @@
 /**
  * [INPUT]: 依赖 playwright-core、Electron 入口和假 HOME 测试目录
- * [OUTPUT]: 对外提供终端、通知、Codex 启动、文件定位和服务端安全的综合验收脚本
+ * [OUTPUT]: 对外提供终端、通知、Codex 启动、退出生命周期、文件定位和服务端安全的综合验收脚本
  * [POS]: experiments/bugfix-202606 的自动化回归入口，覆盖 2026-06 终端修复
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 // 2026-06 批量修复的自动化验收：Playwright 驱动 Electron（假 HOME，不碰真实数据，不影响正在跑的翻箱）。
 // 覆盖：①冷启动 PTY 列宽 ②IME CapsLock 双写 ③通知误报四场景 ④标签项目识别/双击定位/Codex 按钮
-// ⑤滚动失同步（隐藏期灌行后能滚到底）⑥裸文件名回扫定位（带同名诱饵）⑦CSRF Origin 校验。共 16 项断言。
+// ⑤滚动失同步（隐藏期灌行后能滚到底）⑥裸文件名回扫定位（带同名诱饵）⑦CSRF Origin 校验
+// ⑧有终端时确认退出能结束主进程。共 17 项断言。
 const { _electron } = require('playwright-core');
 const http = require('http');
 const fs = require('fs');
@@ -210,10 +211,15 @@ setTimeout(() => { console.error('FAIL: watchdog 超时'); process.exit(2); }, 2
   fs.mkdirSync(path.join(__dirname, 'shots'), { recursive: true });
   await win.screenshot({ path: path.join(__dirname, 'shots', 'after-fix.png') });
 
+  // ---------- ⑧ 有终端时确认退出：异步确认返回后必须真正结束主进程 ----------
+  await app.evaluate(({ dialog }) => { dialog.showMessageBox = async () => ({ response: 1 }); });
+  const closed = await Promise.race([
+    app.close().then(() => true).catch(() => false),
+    new Promise((resolve) => setTimeout(() => resolve(false), 5000)),
+  ]);
+  check(closed, '有终端时确认退出能结束主进程');
+  if (!closed) await app.evaluate(({ app: electronApp }) => electronApp.exit(1)).catch(() => {});
+
   console.log(fails === 0 ? '\n全部通过 ✅' : '\n有 ' + fails + ' 项失败 ❌');
-  // 先杀光 PTY 再退出，否则主进程的「还有终端在运行」确认对话框会挡住 app.close()
-  await win.evaluate(() => term.sessions.slice().forEach((s) => { try { window.fanboxPty.kill(s.id); } catch { /* */ } }));
-  await win.waitForTimeout(400);
-  await app.close().catch(() => {});
   setTimeout(() => process.exit(fails === 0 ? 0 : 1), 1200);
 })().catch((e) => { console.error('FAIL: 脚本异常', e); process.exit(1); });

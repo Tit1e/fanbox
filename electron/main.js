@@ -418,20 +418,29 @@ app.on('activate', () => {
   else if (win && !win.isDestroyed()) { win.show(); win.focus(); } // 从 Dock 点回来：显示隐藏的窗口，状态原样还在
 });
 // ⌘Q 兜底：还有终端在跑时（agent 任务），退出前确认，避免手滑全灭
-let quitConfirmed = false;
 let isQuitting = false; // 真正退出（⌘Q / 菜单退出）才置真；点红叉只隐藏不退出，见 win.on('close')
+let quitPrompting = false;
 app.on('before-quit', (e) => {
-  if (quitConfirmed || terminals.size === 0) { isQuitting = true; return; }
+  if (isQuitting || terminals.size === 0) { isQuitting = true; return; }
   e.preventDefault();
-  const choice = dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
+  if (quitPrompting) return;
+  quitPrompting = true;
+  dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
     type: 'warning',
     buttons: [M('取消', 'Cancel'), M('退出', 'Quit')],
     defaultId: 0,
     cancelId: 0,
     message: M(`还有 ${terminals.size} 个终端会话在运行`, `${terminals.size} terminal session(s) still running`),
     detail: M('退出会终止正在运行的 agent 任务，确定退出？', 'Quitting will terminate running agent tasks. Quit anyway?'),
+  }).then(({ response }) => {
+    quitPrompting = false;
+    if (response !== 1) return;
+    // 当前 before-quit 已经被取消；等异步确认返回后再发起一次全新的退出事务。
+    isQuitting = true;
+    app.quit();
+  }).catch(() => {
+    quitPrompting = false;
   });
-  if (choice === 1) { quitConfirmed = true; isQuitting = true; app.quit(); }
 });
 app.on('window-all-closed', () => {
   terminals.forEach((p) => { try { p.kill(); } catch { /* */ } });
