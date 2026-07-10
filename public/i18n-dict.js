@@ -290,6 +290,7 @@ window.FANBOX_DICT = {
   'Codex 任务完成': 'Codex task done',
   '终端已退出': 'Terminal exited',
   '[进程已退出 — 回车重开，或 ✕ 关闭]': '[Process exited — Enter to restart, or ✕ to close]',
+  '没有可切换的终端标签': 'No terminal tabs to switch to',
 
   // ---------- 更新提示 ----------
   '去下载': 'Download',
@@ -366,6 +367,7 @@ window.FANBOX_DICT_RULES = [
   [/^当前目录 (.+)$/, (m) => `This folder ${m[1]}`],
   // 终端
   [/^已在终端启动 (.+)$/, (m) => `Started ${m[1]} in terminal`],
+  [/^没有第 (\d+) 个终端标签$/, (m) => `There is no terminal tab ${m[1]}`],
   [/^没找到「(.+)」$/, (m) => `Couldn't find "${m[1]}"`],
   [/^未精确命中，已打开最接近的「(.+)」$/, (m) => `No exact match — opened the closest "${m[1]}"`],
   [/^（来自 (.+) 的片段）$/, (m) => `(snippet from ${m[1]})`],

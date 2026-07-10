@@ -2228,6 +2228,13 @@ function bindEvents() {
       return;
     }
     if (lbOpen) { if (e.key === 'Escape') document.querySelector('.lightbox').remove(); return; }
+    const primaryShortcut = window.fanboxEnv?.platform === 'darwin' ? e.metaKey : (e.ctrlKey || e.metaKey);
+    const terminalTabShortcut = primaryShortcut && !e.shiftKey && !e.altKey && /^[1-9]$/.test(e.key);
+    if (terminalTabShortcut && !document.querySelector('.input-overlay')) {
+      e.preventDefault();
+      term.activateByShortcut(Number(e.key));
+      return;
+    }
     if (imgEditState && (e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); ieUndo(imgEditState); return; }
     // 全屏预览下 Esc 先退出全屏（即便焦点在 md 编辑器里），不直接关掉预览
     if (e.key === 'Escape' && previewMax) { e.preventDefault(); setPreviewMax(false); return; }
@@ -2760,12 +2767,27 @@ const term = {
     if (!r.ok) { sess.dead = true; sess.xterm.write('\x1b[31m重开失败：' + (r.error || '') + '\x1b[0m\r\n'); }
     else sess.cwd = r.cwd || sess.startDir;
   },
+  // 对齐 Chrome：1-8 按顺序选标签，9 永远选最后一个；不存在时不创建会话
+  activateByShortcut(number) {
+    const index = number === 9 ? this.sessions.length - 1 : number - 1;
+    const target = index >= 0 ? this.sessions[index] : null;
+    if (!target) {
+      toast(number === 9 ? '没有可切换的终端标签' : `没有第 ${number} 个终端标签`);
+      return;
+    }
+    if ($('#terminal-panel').classList.contains('hidden')) this.open();
+    this.activate(target.id);
+  },
   activate(id) {
     this.active = id;
     this.sessions.forEach((s) => s.host.classList.toggle('show', s.id === id));
     const cur = this.sessions.find((x) => x.id === id);
     if (cur) cur.unread = false; // 切到该标签即清未读
     this.renderTabs();
+    requestAnimationFrame(() => {
+      const activeTab = $('#term-tabs .term-tab.active');
+      if (activeTab) activeTab.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
     const s = this.sessions.find((x) => x.id === id);
     if (s) {
       this.fitActive();

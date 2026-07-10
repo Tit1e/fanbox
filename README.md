@@ -120,8 +120,8 @@ The UI was designed with [huashu-design](https://github.com/alchaincyf/huashu-de
   Select text in a preview and fling it into the terminal with file provenance + fencing (bracketed paste, never executed line by line).
 - **态势感知 / Situational awareness** — 标签圆点显示 Codex 运行/空闲/退出；Codex 把球踢回给你时终端边缘呼吸提示「轮到你」，长任务完成发系统通知。
   Tab dots show running/idle/exited; when Codex hands the ball back, the terminal edge breathes; long tasks fire a system notification.
-- **Codex 一键启动 / Codex quick launch** — 顶栏固定 Codex 按钮：默认继续当前目录最近的会话，也可在设置中改为新建会话；空闲 shell 就地启动，已有任务时自动新开终端标签。终端设置同时管理提示音和 WebGL 兼容开关。
-  The fixed Codex button continues the latest session in the current folder by default, or starts a new one when selected in settings. It reuses an idle shell or opens a new terminal tab when one is busy; terminal settings also control the chime and WebGL compatibility mode.
+- **Codex 一键启动 / Codex quick launch** — 顶栏固定 Codex 按钮：始终在左侧当前目录新建终端标签，默认继续该目录最近的会话，也可在设置中改为新建会话。终端设置同时管理提示音和 WebGL 兼容开关。
+  The fixed Codex button always opens a new terminal tab in the current folder on the left. It continues that folder's latest session by default, or starts a new session when selected in settings; terminal settings also control the chime and WebGL compatibility mode.
 
 ### Editing · WYSIWYG / 编辑 · 所见即所得
 
@@ -193,6 +193,7 @@ npm run dist         # 打包签名 .dmg（产物在 dist/，不入 git）/ buil
 |---|---|---|---|
 | 全局搜索 / Global search | `⌘K` | 用编辑器打开 / Open in editor | `⌘↵` |
 | 折叠侧栏 / Toggle sidebar | `⌘B` | 后退 / Back | `⌘[` |
+| 终端标签 1–8 / Terminal tabs 1–8 | `⌘1`–`⌘8` | 最后一个终端标签 / Last terminal tab | `⌘9` |
 | 当前目录筛选 / Filter current folder | `/` | 打开/预览 / Open/preview | `↵` |
 | 结果上下选择 / Navigate results | `↑` `↓` | 关闭 / Close | `Esc` |
 
