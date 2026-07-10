@@ -2096,6 +2096,12 @@ function bindEvents() {
   shotTray.init();
   $('#term-newtab').onclick = () => term.newTab();
   $('#term-max').onclick = () => term.toggleMax();
+  const termTabs = $('#term-tabs');
+  termTabs.addEventListener('wheel', (ev) => {
+    if (!ev.deltaY || termTabs.scrollWidth <= termTabs.clientWidth) return;
+    ev.preventDefault();
+    termTabs.scrollLeft += ev.deltaY;
+  }, { passive: false });
   // 双击终端顶栏空白处（避开标签/按钮/输入框）= 铺满终端：agent 交互窗口最重要，给它一键放到最大
   $('.term-head').addEventListener('dblclick', (ev) => {
     if (ev.target.closest('button, .term-tab, input')) return;
