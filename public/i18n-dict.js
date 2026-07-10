@@ -54,8 +54,6 @@ window.FANBOX_DICT = {
   '没找到最近修改的文件': 'No recently modified files',
   '发版': 'Release',
   '版本号→CHANGELOG→打包→push→Release 一条龙，在终端跑': 'Version bump → CHANGELOG → build → push → Release, end to end in the terminal',
-  '项目记忆': 'Project memory',
-  '这个文件夹里 AI 干过什么：历史会话、改过的文件、一键续上': 'What AI has done in this folder: past sessions, changed files, one-click resume',
   '占用透视': 'Disk usage',
   '算上子目录的真实磁盘占用': 'True disk usage including subfolders',
   '⚠ 文件太多，结果可能不完整。进入更具体的子目录可看到全部。': '⚠ Too many files — results may be incomplete. Open a more specific subfolder to see everything.',
@@ -188,15 +186,6 @@ window.FANBOX_DICT = {
   '不理它也会自己走': 'Goes away on its own',
   '已收进 素材/': 'Filed into 素材/',
   '移动失败': 'Move failed',
-
-  // ---------- 项目记忆面板 ----------
-  '翻会话日志中…': 'Digging through session logs…',
-  '这个文件夹还没有 agent 会话记录': 'No agent sessions in this folder yet',
-  '在这里跑过 Claude Code / Codex 之后，历史会话会出现在这里': 'Run Claude Code / Codex here and past sessions will appear',
-  '（无标题会话）': '(untitled session)',
-  '在内嵌终端里接上这段会话的上下文继续': "Resume this session's context in the embedded terminal",
-  '▶ 续上': '▶ Resume',
-  '已在终端续上会话': 'Session resumed in terminal',
 
   // ---------- AI 整理（终端交互式）----------
   '没找到 claude / codex 命令——AI 整理需要装其中一个 CLI': 'claude / codex command not found — AI organize needs one of these CLIs installed',
@@ -380,18 +369,10 @@ window.FANBOX_DICT_RULES = [
   [/^新增 · (.+)$/, (m) => `Added · ${m[1]}`],
   [/^改动 · (.+)$/, (m) => `Changes · ${m[1]}`],
   [/^编辑 · (.+)$/, (m) => `Edit · ${m[1]}`],
-  [/^项目记忆 · (.+)$/, (m) => `Project memory · ${m[1]}`],
   [/^磁盘占用 · (.+)$/, (m) => `Disk usage · ${m[1]}`],
   // 预览底部：创建/修改时间
   [/^创建 (.+)$/, (m) => `Created ${m[1]}`],
   [/^改 (.+)$/, (m) => `Modified ${m[1]}`],
-  // 项目记忆：会话元信息（时间 · N 条消息 · 改了 N 个文件）
-  [/^(刚刚|\d+ 分钟前|\d+ 小时前|\d+ 天前|\d{4}-\d{2}-\d{2}) · (\d+) 条消息(?: · 改了 (\d+) 个文件)?(?: · )?$/, (m) => {
-    const t = m[1] === '刚刚' ? 'just now' : m[1].replace(/^(\d+) 分钟前$/, '$1 min ago').replace(/^(\d+) 小时前$/, '$1 hr ago').replace(/^(\d+) 天前$/, '$1 days ago');
-    return `${t} · ${m[2]} messages${m[3] ? ` · changed ${m[3]} files` : ''}`;
-  }],
-  [/^(\d+) 条消息$/, (m) => `${m[1]} messages`],
-  [/^改了 (\d+) 个文件$/, (m) => `changed ${m[1]} files`],
   // 侧栏 Agent 项目 tooltip：路径\nagents · N 时前活跃
   [/^([\s\S]+)\n(.+) · (刚刚|\d+ 分|\d+ 时|\d+ 天)前活跃$/, (m) => {
     const t = m[3] === '刚刚' ? 'just now' : m[3].replace(/^(\d+) 分$/, '$1m ago').replace(/^(\d+) 时$/, '$1h ago').replace(/^(\d+) 天$/, '$1d ago');

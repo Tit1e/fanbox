@@ -10,7 +10,7 @@
 06-vendor补丁.md: vendor 补丁档案，记录已退役的 xterm CapsLock 补丁、守卫和退场条件
 09-FanBox-Agent架构设计-记忆上下文自进化.md: Agent 前瞻研究，讨论记忆、上下文与验证式自主进化的候选路线
 10-跨平台移植评估-Windows-Intel-Mac.md: 平台兼容性评估，记录 Intel 构建现状与 Windows 剩余适配清单
-11-可配置-agent-路线图.md: Agent 扩展路线图，区分已落地的启动配置与待实现的会话适配器
+11-可配置-agent-路线图.md: Agent 扩展路线图，区分已落地的启动配置与仍需专门适配的项目发现、整理能力
 AI整理目录-设计方案.md: 已废弃的 AI 整理 v1 方案，保留提案审批与回滚设计的历史背景
 Spotlight索引问题排查记录.md: macOS Spotlight 与启动台排障记录，保存验证证据和系统级处理过程
 
