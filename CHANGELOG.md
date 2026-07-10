@@ -12,6 +12,7 @@
 ## [Unreleased]
 
 ### Changed
+- **macOS 打包切换为本机可用签名**：electron-builder 改用 `Apple Development: Haoliang Chen (GVN8YV4PYF)`，移除无效的旧签名与公证 profile；当前证书仅用于开发签名，因此关闭 Apple 公证，首次打开仍按 README 提示右键确认。
 - **Codex 一键启动默认继续最近会话**：终端设置新增“继续最近 Codex 会话”，默认开启并执行 `codex resume --last`，关闭后执行 `codex` 新建会话；原终端顶栏铃铛按钮移除，Codex 提示音开关迁入同一设置面板，既有静音偏好保持不变。
 
 ### Fixed
