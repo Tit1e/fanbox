@@ -1,3 +1,9 @@
+/**
+ * [INPUT]: 依赖 i18n-dict.js 词典、index.html 语言开关 DOM、localStorage 和语言配置 HTTP API
+ * [OUTPUT]: 对外提供 window.t、window.fanboxSetLang 与 MutationObserver 动态翻译能力
+ * [POS]: public 模块的国际化运行层，以中文为源语言驱动静态界面和动态文案翻译
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
 'use strict';
 /**
  * FanBox i18n —— 集中式翻译层。
@@ -61,8 +67,8 @@
   };
   window.t = tr;
 
-  // 用户内容区不翻译：文件预览正文、三种编辑器、终端、灯箱、回合存档标签（含终端标题）
-  const SKIP = '#preview-body, #ed-host, .xterm, .milkdown, .lightbox, .cp-name, .cp-dir, .snap-lb';
+  // 用户内容区不翻译：文件预览正文、三种编辑器、终端、灯箱和终端标题
+  const SKIP = '#preview-body, #ed-host, .xterm, .milkdown, .lightbox, .cp-name, .cp-dir';
   const ATTRS = ['title', 'placeholder'];
   const visit = (node) => {
     if (node.nodeType === Node.TEXT_NODE) {
