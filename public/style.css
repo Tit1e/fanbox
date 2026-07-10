@@ -164,7 +164,7 @@ kbd {
 .agent-dot.claude { background: #d97757; }
 .agent-dot.codex { background: #10a37f; }
 .brand .logo { color: var(--accent); }
-.theme-switch { padding: 12px 8px 6px; border-top: 1px solid var(--border); }
+.theme-switch { margin-top: auto; padding: 12px 8px 6px; border-top: 1px solid var(--border); }
 .theme-switch-label { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 7px; }
 .theme-seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
 .theme-seg button { flex: 1; border: none; border-right: 1px solid var(--border); background: var(--bg-3); color: var(--text-dim); padding: 6px 4px; font-size: 12px; cursor: pointer; font-family: var(--font-ui); transition: 0.12s; }
