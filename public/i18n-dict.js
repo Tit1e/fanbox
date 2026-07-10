@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 'use strict';
-// FanBox 界面词典：中文原文 → 英文。由 i18n.js 消费；缺词条时英文界面回退显示中文。
+// CodexBox 界面词典：中文原文 → 英文。由 i18n.js 消费；缺词条时英文界面回退显示中文。
 window.FANBOX_DICT = {
   // ---------- 侧栏 ----------
   'Codex 的驾驶舱': 'The cockpit for Codex',
@@ -221,7 +221,7 @@ window.FANBOX_DICT = {
   '⚠ 结果可能不完整，换更具体的关键词或缩小到当前目录': '⚠ Results may be incomplete — try a more specific term or narrow to this folder',
 
   // ---------- 欢迎页（首次引导，按文本片段拆分）----------
-  '欢迎用 FanBox': 'Welcome to FanBox',
+  '欢迎用 CodexBox': 'Welcome to CodexBox',
   'Codex 的驾驶舱——找文件、跑 Codex、看它改、随手改，都在一个窗口：': 'The Codex cockpit — find files, run Codex, watch it edit, edit on the fly, all in one window:',
   '全局搜文件和文件夹；': 'searches all files and folders;',
   '把项目直接在编辑器整包打开；': 'opens the whole project in your editor;',

@@ -1,7 +1,7 @@
 {
   "name": "fanbox",
   "version": "2.6.5",
-  "description": "FanBox — the local desktop cockpit for Codex. Run Codex, watch every file and line it changes, and take over anytime.",
+  "description": "CodexBox — the local desktop cockpit for Codex. Run Codex, watch every file and line it changes, and take over anytime.",
   "bin": {
     "fanbox": "server.js"
   },
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "com.huashu.fanbox",
-    "productName": "FanBox",
+    "productName": "CodexBox",
     "directories": {
       "buildResources": "build",
       "output": "dist"
@@ -45,7 +45,7 @@
       ]
     },
     "dmg": {
-      "title": "FanBox",
+      "title": "CodexBox",
       "writeUpdateInfo": false
     }
   },

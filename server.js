@@ -445,7 +445,7 @@ function trashPath(p) {
       let msg = err.message;
       // Finder 自动化未授权（-1743/-600）给人话
       if (PLATFORM === 'darwin' && /-1743|-600|not allowed|authoriz/i.test(msg)) {
-        msg = '需在「系统设置 → 隐私与安全性 → 自动化」里允许 FanBox 控制 Finder（首次删除会弹授权）';
+        msg = '需在「系统设置 → 隐私与安全性 → 自动化」里允许 CodexBox 控制 Finder（首次删除会弹授权）';
       }
       resolve({ ok: false, error: msg });
     });
@@ -469,7 +469,7 @@ async function renamePath(p, newName) {
 }
 
 // ---------- AI 整理：备料 + 在内嵌终端拉起 Codex ----------
-// 翻箱只负责把整理偏好、过往整理历史和工作约定写成 brief 文件；
+// CodexBox 只负责把整理偏好、过往整理历史和工作约定写成 brief 文件；
 // Codex 先摊方案，用户确认后再动手，并持续写回滚日志与偏好。
 const ORGANIZE_LOG_DIR = path.join(CONFIG_DIR, 'organize-log');
 const ORGANIZE_PREFS_FILE = path.join(CONFIG_DIR, 'organize-prefs.md');
@@ -530,9 +530,9 @@ async function organizeLaunch(b) {
   if (!bin) return { ok: false, error: '没找到 codex 命令——AI 整理需要先安装 Codex CLI' };
   const prefs = await fsp.readFile(ORGANIZE_PREFS_FILE, 'utf8').catch(() => '');
   const history = await organizeHistory();
-  const brief = `# AI 整理任务（翻箱 FanBox 生成，每次启动覆盖本文件）
+  const brief = `# AI 整理任务（CodexBox 生成，每次启动覆盖本文件）
 
-你在翻箱的内嵌终端里，帮用户对话式整理这个文件夹：${dir}
+你在 CodexBox 的内嵌终端里，帮用户对话式整理这个文件夹：${dir}
 
 ## 工作流程
 1. 先看现状：列出当前文件夹的松散文件（名字/类型/大小/修改时间）。文件夹和隐藏文件一律不动
@@ -1442,7 +1442,7 @@ const server = http.createServer(async (req, res) => {
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`\n  ⚠️  端口 ${PORT} 已被占用——FanBox 很可能已经在运行了。`);
+    console.error(`\n  ⚠️  端口 ${PORT} 已被占用——CodexBox 很可能已经在运行了。`);
     console.error(`      直接打开浏览器访问  http://localhost:${PORT}  就行；`);
     console.error(`      想另开一个，换端口：FANBOX_PORT=8080 node server.js\n`);
   } else {
@@ -1483,7 +1483,7 @@ previewServer.listen(PREVIEW_PORT, '127.0.0.1', () => { console.log(`  🖼  预
 
 server.listen(PORT, '127.0.0.1', () => {
   const link = `http://localhost:${PORT}`;
-  console.log('\n  📦  FanBox 已启动');
+  console.log('\n  📦  CodexBox 已启动');
   console.log(`  🔗  ${link}`);
   console.log('  🏠  根目录:', HOME);
   console.log('\n  按 Ctrl+C 退出\n');

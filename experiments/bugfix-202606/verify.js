@@ -1,13 +1,13 @@
 /**
  * [INPUT]: 依赖 playwright-core、Electron 入口和假 HOME 测试目录
- * [OUTPUT]: 对外提供终端、通知、Codex 启动、退出生命周期、文件定位和服务端安全的综合验收脚本
+ * [OUTPUT]: 对外提供终端、开发环境隔离、通知、Codex 启动、退出生命周期、文件定位和服务端安全的综合验收脚本
  * [POS]: experiments/bugfix-202606 的自动化回归入口，覆盖 2026-06 终端修复
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
-// 2026-06 批量修复的自动化验收：Playwright 驱动 Electron（假 HOME，不碰真实数据，不影响正在跑的翻箱）。
-// 覆盖：①冷启动 PTY 列宽 ②IME CapsLock 双写 ③通知误报四场景 ④标签项目识别/双击定位/Codex 按钮
+// 2026-06 批量修复的自动化验收：Playwright 驱动 Electron（假 HOME，不碰真实数据，不影响正在跑的 CodexBox）。
+// 覆盖：①冷启动 PTY 列宽/开发端口与数据目录隔离 ②IME CapsLock 双写 ③通知误报四场景 ④标签项目识别/双击定位/Codex 按钮
 // ⑤滚动失同步（隐藏期灌行后能滚到底）⑥裸文件名回扫定位（带同名诱饵）⑦CSRF Origin 校验
-// ⑧有终端时确认退出能结束主进程。共 17 项断言。
+// ⑧有终端时确认退出能结束主进程。共 19 项断言。
 const { _electron } = require('playwright-core');
 const http = require('http');
 const fs = require('fs');
@@ -40,7 +40,9 @@ setTimeout(() => { console.error('FAIL: watchdog 超时'); process.exit(2); }, 2
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
   fs.writeFileSync(path.join(proj, 'lovart_2ffda3364d71.png'), png);
   fs.writeFileSync(path.join(decoy, 'lovart_2ffda3364d71.png'), png);
-  const app = await _electron.launch({ args: [ROOT], cwd: ROOT, env: { ...process.env, HOME, FANBOX_PORT: '4640' } });
+  const app = await _electron.launch({ args: [ROOT], cwd: ROOT, env: { ...process.env, HOME, FANBOX_DEV_PORT: '4640' } });
+  const runtime = await app.evaluate(({ app: electronApp }) => ({ packaged: electronApp.isPackaged, userData: electronApp.getPath('userData') }));
+  check(!runtime.packaged && path.basename(runtime.userData) === 'CodexBox', '开发版使用独立用户数据目录', JSON.stringify(runtime));
   const win = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; w.setSize(1560, 950); w.center(); });
   await win.waitForTimeout(2200);
@@ -56,6 +58,20 @@ setTimeout(() => { console.error('FAIL: watchdog 超时'); process.exit(2); }, 2
   const stty = await win.evaluate(() => { const s = term.sessions.find((x) => x.id === term.active); const b = s.xterm.buffer.active; for (let i = b.length - 1; i >= 0; i--) { const l = b.getLine(i); if (!l) continue; const t = l.translateToString(true).trim(); if (/^\d+ \d+$/.test(t)) return t; } return null; });
   const ptyCols = Number((stty || '0 0').split(' ')[1]);
   check(ptyCols > 120 && ptyCols === r1.cols, '冷启动 PTY 列宽与 xterm 对齐', 'stty=' + stty + ' xterm=' + r1.cols);
+
+  // 主进程用 FANBOX_DEV_PORT=4640 启动测试服务，但端口覆盖不能泄漏进用户终端。
+  await win.evaluate(() => term.input(term.active, 'printf "__FANBOX_ENV__%s|%s|%s\\n" "${FANBOX_PORT-unset}" "${FANBOX_DEV_PORT-unset}" "${FANBOX_NO_OPEN-unset}"\r'));
+  await win.waitForTimeout(500);
+  const portEnv = await win.evaluate(() => {
+    const s = term.sessions.find((x) => x.id === term.active);
+    const b = s.xterm.buffer.active;
+    for (let i = b.length - 1; i >= 0; i--) {
+      const line = b.getLine(i)?.translateToString(true).trim();
+      if (line?.startsWith('__FANBOX_ENV__')) return line;
+    }
+    return null;
+  });
+  check(portEnv === '__FANBOX_ENV__unset|unset|unset', '主进程端口变量不泄漏进终端', String(portEnv));
 
   // ---------- ② IME：composition 中按 CapsLock，只应落一次 yaoda ----------
   const ime = await win.evaluate(async () => {

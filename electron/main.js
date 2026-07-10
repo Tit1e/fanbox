@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Electron 的窗口/菜单/IPC/系统能力、../server.js 本地服务、../port-config.js 端口配置和 node-pty 终端
- * [OUTPUT]: 对外提供 FanBox 桌面主进程、PTY 与文件/剪贴板/更新 IPC、原生菜单和窗口生命周期
+ * [OUTPUT]: 对外提供 CodexBox 桌面主进程、PTY 与文件/剪贴板/更新 IPC、原生菜单和窗口生命周期
  * [POS]: electron 模块的主进程编排器，与 preload.js 协作连接渲染层、本地服务和操作系统
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -10,6 +10,11 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { resolvePort } = require('../port-config');
+
+const APP_NAME = 'CodexBox';
+app.setName(APP_NAME);
+// 正式版改名不迁移 Chromium 数据；开发版必须使用独立目录，才能与已运行的正式版并存。
+if (app.isPackaged) app.setPath('userData', path.join(app.getPath('appData'), 'FanBox'));
 
 // 复用现有后端：require 即 listen 127.0.0.1:PORT，不自动开浏览器
 process.env.FANBOX_NO_OPEN = '1';
@@ -79,11 +84,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // 开发模式下 macOS 默认显示 Electron 图标——换成翻箱自己的（打包后由 electron-builder 的 icon 接管）
+  // 开发模式下 macOS 默认显示 Electron 图标——换成 CodexBox 自己的（打包后由 electron-builder 的 icon 接管）
   if (process.platform === 'darwin' && app.dock) {
     try { app.dock.setIcon(nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png'))); } catch { /* */ }
   }
-  app.setName('FanBox');
   // 后端跑在 localhost，访问它永不该走代理。个别环境（clash 强制系统代理、企业 PAC 把 loopback 也代理）
   // 会把本地请求拦成 502 → 整个界面白屏。给 loopback 显式加旁路；其余（如查更新走 GitHub）仍按系统代理，互不影响。
   session.defaultSession.setProxy({ mode: 'system', proxyBypassRules: 'localhost;127.0.0.1;[::1]' }).catch(() => { /* 设置失败就退回默认行为，不影响启动 */ });
@@ -221,7 +225,7 @@ async function checkUpdate(opts) {
 ipcMain.handle('update:open', (e, { url }) => { if (/^https:\/\/github\.com\//.test(String(url))) shell.openExternal(url); });
 ipcMain.handle('update:get', () => pendingUpdate);
 
-// #26 应用内下载更新：按当前架构拼 dmg 资产地址（发布产物统一 FanBox-<版本>-<arch>.dmg），
+// #26 应用内下载更新：按当前架构拼 dmg 资产地址（发布产物统一 CodexBox-<版本>-<arch>.dmg），
 // 下到 ~/Downloads 后直接打开挂载，拖进 Applications 即完成。全自动安装（Squirrel）仍要等 Developer ID 签名
 let updDownloading = false;
 ipcMain.handle('update:download', async (e, { version }) => {
@@ -229,8 +233,9 @@ ipcMain.handle('update:download', async (e, { version }) => {
   const ver = String(version || '').replace(/^v/, '');
   if (!/^\d+\.\d+\.\d+$/.test(ver)) return { ok: false, error: 'bad version' };
   const arch = process.arch === 'arm64' ? 'arm64' : 'x64';
-  const url = `https://github.com/${RELEASE_REPO}/releases/download/v${ver}/FanBox-${ver}-${arch}.dmg`;
-  const dest = path.join(app.getPath('downloads'), `FanBox-${ver}-${arch}.dmg`);
+  const assetName = `${APP_NAME}-${ver}-${arch}.dmg`;
+  const url = `https://github.com/${RELEASE_REPO}/releases/download/v${ver}/${assetName}`;
+  const dest = path.join(app.getPath('downloads'), assetName);
   const send = (m) => { if (win && !win.isDestroyed()) win.webContents.send('update:progress', m); };
   updDownloading = true;
   const tmp = dest + '.part';
@@ -356,8 +361,8 @@ async function setLidIntent(on) {
     const choice = dialog.showMessageBoxSync(win && !win.isDestroyed() ? win : undefined, {
       type: 'warning', buttons: [M('开启', 'Enable'), M('取消', 'Cancel')], defaultId: 0, cancelId: 1,
       message: M('合盖后继续运行', 'Keep running with lid closed'),
-      detail: M('开启后，只要还有终端会话在跑，合上盖子也不会休眠——agent 任务能接着干。\n\n注意：合盖期间持续耗电发热，建议接电源。终端全部退出或退出翻箱时自动恢复正常休眠。\n\n首次开启需输入一次管理员密码（装一条仅限电源设置的免密规则）。',
-        'While any terminal session is running, closing the lid won\'t sleep the Mac — your agent tasks keep going.\n\nNote: it keeps drawing power and heat while closed; stay plugged in. Normal sleep is restored once all terminals exit or you quit FanBox.\n\nFirst time needs your admin password once (installs a power-only passwordless rule).'),
+      detail: M('开启后，只要还有终端会话在跑，合上盖子也不会休眠——agent 任务能接着干。\n\n注意：合盖期间持续耗电发热，建议接电源。终端全部退出或退出 CodexBox 时自动恢复正常休眠。\n\n首次开启需输入一次管理员密码（装一条仅限电源设置的免密规则）。',
+        'While any terminal session is running, closing the lid won\'t sleep the Mac — your agent tasks keep going.\n\nNote: it keeps drawing power and heat while closed; stay plugged in. Normal sleep is restored once all terminals exit or you quit CodexBox.\n\nFirst time needs your admin password once (installs a power-only passwordless rule).'),
     });
     console.log('[lid] warning dialog choice =', choice, '(0=开启)');
     if (choice !== 0) { buildMenu(); return; } // 取消 → 复位勾选
@@ -380,13 +385,13 @@ async function setLidIntent(on) {
 function buildMenu() {
   const isMac = process.platform === 'darwin';
   const template = [
-    ...(isMac ? [{ label: 'FanBox', submenu: [
-      { role: 'about', label: M('关于 FanBox', 'About FanBox') },
+    ...(isMac ? [{ label: APP_NAME, submenu: [
+      { role: 'about', label: M('关于 CodexBox', 'About CodexBox') },
       { label: M('检查更新…', 'Check for Updates…'), click: () => checkUpdate({ manual: true }) },
       { type: 'separator' },
-      { role: 'hide', label: M('隐藏 FanBox', 'Hide FanBox') }, { role: 'hideOthers', label: M('隐藏其他', 'Hide Others') }, { role: 'unhide', label: M('全部显示', 'Show All') },
+      { role: 'hide', label: M('隐藏 CodexBox', 'Hide CodexBox') }, { role: 'hideOthers', label: M('隐藏其他', 'Hide Others') }, { role: 'unhide', label: M('全部显示', 'Show All') },
       { type: 'separator' },
-      { role: 'quit', label: M('退出 FanBox', 'Quit FanBox') },
+      { role: 'quit', label: M('退出 CodexBox', 'Quit CodexBox') },
     ] }] : []),
     { label: M('文件', 'File'), submenu: [
       ...(isMac ? [] : [{ label: M('检查更新…', 'Check for Updates…'), click: () => checkUpdate({ manual: true }) }, { type: 'separator' }]),
@@ -460,8 +465,13 @@ ipcMain.handle('pty:spawn', (e, { id, cwd, cols, rows }) => {
   // 用户在那里配的 Homebrew/nvm/npm 全局路径（codex 等）就丢了 → 「普通终端能找到、fanbox 找不到」。
   // 走 login shell 把这些路径带进来。Windows 的 powershell 无此机制，保持空参数。
   const shellArgs = process.platform === 'win32' ? [] : ['-l'];
-  // GUI 启动的 app 不继承 shell 的 locale，zsh 会把中文路径按字节转义成 \M-^@ 乱码 → 兜底 UTF-8
+  // GUI 启动的 app 不继承 shell 的 locale，zsh 会把中文路径按字节转义成 \M-^@ 乱码 → 兜底 UTF-8。
+  // 端口覆盖和禁止开浏览器只用于主进程复用本地服务，不能泄漏进用户终端。
+  // login shell 自己配置的同名变量仍可正常生效。
   const env = { ...process.env, TERM: 'xterm-256color', FANBOX: '1' };
+  delete env.FANBOX_PORT;
+  delete env.FANBOX_DEV_PORT;
+  delete env.FANBOX_NO_OPEN;
   if (!/UTF-8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || '')) env.LANG = 'zh_CN.UTF-8';
   let p;
   try {

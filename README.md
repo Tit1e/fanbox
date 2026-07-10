@@ -183,7 +183,7 @@ npm run app          # electron . 启动完整桌面版 / full desktop app
 npm run dist         # 打包签名 .dmg（产物在 dist/，不入 git）/ build & sign the .dmg (output in dist/)
 ```
 
-开发入口 `npm start` 和 `npm run app` 默认跑 `http://localhost:4577`（预览服务 `4578`），正式打包版默认跑 `http://localhost:4567`（预览服务 `4568`），避免本机同时开正式版和开发版时端口冲突。需要手动指定时仍可用 `FANBOX_PORT=xxxx npm start` 或 `FANBOX_PORT=xxxx npm run app`。
+开发入口 `npm start` 和 `npm run app` 默认跑 `http://localhost:4577`（预览服务 `4578`），正式打包版默认跑 `http://localhost:4567`（预览服务 `4568`），避免本机同时开正式版和开发版时端口冲突。开发环境需要手动指定时使用 `FANBOX_DEV_PORT=xxxx npm start` 或 `FANBOX_DEV_PORT=xxxx npm run app`；正式环境继续使用 `FANBOX_PORT`。
 
 > 打包遇到 Electron 下载被墙：`ELECTRON_MIRROR="https://registry.npmmirror.com/-/binary/electron/" npm run dist`
 

@@ -10,7 +10,7 @@ const FAKE_HOME = '/tmp/fb-home';
   for (const d of ['Desktop', 'Documents', 'Downloads']) fs.mkdirSync(path.join(FAKE_HOME, d), { recursive: true });
   const app = await _electron.launch({
     args: [ROOT], cwd: ROOT,
-    env: { ...process.env, HOME: FAKE_HOME, FANBOX_PORT: '4621' },
+    env: { ...process.env, HOME: FAKE_HOME, FANBOX_DEV_PORT: '4621' },
   });
   const win = await app.firstWindow();
   await app.evaluate(({ BrowserWindow }) => {

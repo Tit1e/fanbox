@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 index.html DOM、i18n.js、服务端 HTTP API、xterm/Monaco/Milkdown 浏览器全局对象和 Electron preload 桥接
- * [OUTPUT]: 对外提供 FanBox 文件管理、预览编辑、内嵌终端、Codex 文件跟随和全局交互
+ * [OUTPUT]: 对外提供 CodexBox 文件管理、预览编辑、内嵌终端、Codex 文件跟随和全局交互
  * [POS]: public 模块的渲染层主入口，集中编排页面状态、视图和桌面能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -1561,7 +1561,7 @@ const shotTray = {
 };
 
 // AI 整理：一键在内嵌终端拉起 Codex 对话式整理。
-// 翻箱只备料——把整理偏好、过往整理历史、工作约定写成 brief 文件，Codex 读完先摊方案，
+// CodexBox 只备料——把整理偏好、过往整理历史、工作约定写成 brief 文件，Codex 读完先摊方案，
 // 你在终端里对话确认/调整后它才动手；每批移动写回滚日志，想撤销在对话里说一声就行
 async function organizeLaunch(dirPath) {
   const r = await apiPost('/api/organize/launch', { path: dirPath });
@@ -1909,7 +1909,7 @@ function maybeShowGuide() {
   ov.className = 'guide-overlay';
   ov.innerHTML = `<div class="guide-card">
     <div class="guide-logo">${svgWrap(SVG.box, 'currentColor', 46, true)}</div>
-    <h2>欢迎用 FanBox</h2>
+    <h2>欢迎用 CodexBox</h2>
     <p>Codex 的驾驶舱——找文件、跑 Codex、看它改、随手改，都在一个窗口：</p>
     <ul>
       <li><b>⌘K</b> 全局搜文件和文件夹；<b>⌘↵</b> 把项目直接在编辑器整包打开；<code>内容:关键词</code> 搜文件里的字</li>
@@ -2429,7 +2429,7 @@ const term = {
     }
     window.fanboxPty.input(id, d);
   },
-  // 点终端里的文件名/路径 → 结合 cwd + 回扫 scrollback + 搜索定位真实文件，在翻箱里打开
+  // 点终端里的文件名/路径 → 结合 cwd + 回扫 scrollback + 搜索定位真实文件，在 CodexBox 里打开
   // tail：路径在该逻辑行里的后续文本，服务端用它做「空格扩展」stat 验证（带空格的文件名靠它补全）
   // rowHint：点击处逻辑行的末物理行号（buffer 绝对行），回扫 scrollback 的起点
   async openTermPath(id, raw, tail, rowHint) {
@@ -2637,7 +2637,7 @@ const term = {
       }
     });
 
-    // 识别终端输出里的文件路径 → hover 高亮 + 点击在翻箱打开
+    // 识别终端输出里的文件路径 → hover 高亮 + 点击在 CodexBox 打开
     // 三层匹配：引号串（边界最可靠，文件名可含空格）> 斜杠路径 > 带已知扩展名的裸文件名；
     // 长路径折行用逐 cell 拼回逻辑行（CJK 宽字符占两列，下标→坐标必须按 cell 算才不偏移）
     if (xterm.registerLinkProvider) {

@@ -6,7 +6,7 @@
  */
 'use strict';
 /**
- * FanBox i18n —— 集中式翻译层。
+ * CodexBox i18n —— 集中式翻译层。
  * 词典在 i18n-dict.js（中文原文为键）；中文是源语言，zh 模式下本文件几乎不做事。
  * EN 模式机制：MutationObserver 在微任务时机翻译新增/变更的文本节点和 title/placeholder 属性，
  * 绘制前完成、无闪烁，app.js 不需要散布翻译调用。用户内容区（预览/编辑器/终端）一律不碰。
