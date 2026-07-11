@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 index.html DOM、i18n.js、服务端 HTTP API、xterm/Monaco/Milkdown 浏览器全局对象和 Electron preload 桥接
- * [OUTPUT]: 对外提供 CodexBox 文件管理、预览编辑、内嵌终端、Codex 项目会话归档/删除、文件跟随和全局交互
+ * [INPUT]: 依赖 index.html DOM、i18n.js、服务端 HTTP/Git API、xterm/Monaco/Milkdown 浏览器全局对象和 Electron preload 桥接
+ * [OUTPUT]: 对外提供 CodexBox 文件管理、Git 变更查看、预览编辑、内嵌终端、Codex 项目会话操作、文件跟随和全局交互
  * [POS]: public 模块的渲染层主入口，集中编排页面状态、视图和桌面能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -20,6 +20,7 @@ import { createUiController } from './modules/ui-controller.js';
 import { startApplication } from './modules/lifecycle.js';
 import { createEffects } from './modules/effects.js';
 import { guardEditExit } from './modules/edit-session.js';
+import { createGitPanel } from './modules/git-panel.js';
 
 const $ = (s) => document.querySelector(s);
 const api = (p) => fetch(p).then((r) => r.json());
@@ -124,7 +125,7 @@ let navigate, updateWatches, shQuote, goBack, goUp, render, renderBreadcrumb, vi
 let renderStatusbar, renderFiles, makeDraggablePath, applySelection, moveCursor, cursorEnter;
 let dropFilesInto, dropUrlInto;
 
-let openPreview, renderTextPreview, fsUrl, renderPreviewActions, renderPreviewFoot, closePreview;
+let openPreview, showDiff, renderTextPreview, fsUrl, renderPreviewActions, renderPreviewFoot, closePreview;
 let applyLayout, bindSelectionToTerminal, enableTooltips, bindSidebarResizer, applyPreviewSize;
 let animateLayout, restoreFileAreaIfHidden, showPreviewPanel, setPreviewMax, isPreviewMax, toggleSidebar, lightbox;
 
@@ -134,6 +135,7 @@ let closeContextMenu, showContextMenu, popupMenu, shotTray;
 let loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects;
 let cmdk;
 let term;
+let gitPanel;
 
 let maybeShowGuide, bindResizer, bindTerminalResizer, codexResumeLast, bindCodexControls, bindEvents, updateGridSizeVisibility, applyTheme;
 let undoImage;
@@ -172,6 +174,7 @@ function setupControllers() {
     renderTextPreview: (...args) => renderTextPreview(...args), isMdName,
     closePreview: (...args) => closePreview(...args), lightbox: (...args) => lightbox(...args),
     enterImageEdit: (...args) => enterImageEdit(...args),
+    refreshGitStatus: (...args) => gitPanel?.load(...args),
   }));
   ({
     navigate, updateWatches, shQuote, goBack, goUp, render, renderBreadcrumb, visibleEntries,
@@ -185,9 +188,11 @@ function setupControllers() {
     recordRecent, toggleFav, iconSvg, fmtSize, fmtTime, isFav, escapeHtml, openWith,
     showContextMenu, baseOf, ic, svgWrap, SVG, diskPanel, releasePanel, iconColorFor, refresh,
     kindFromName, setPreviewMax: (...args) => setPreviewMax(...args),
+    loadGitStatus: (...args) => gitPanel?.load(...args),
+    renderGitStatus: (...args) => gitPanel?.render(...args),
   }));
   ({
-    openPreview, renderTextPreview, fsUrl, renderPreviewActions, renderPreviewFoot, closePreview, lightbox,
+    openPreview, showDiff, renderTextPreview, fsUrl, renderPreviewActions, renderPreviewFoot, closePreview, lightbox,
     applyLayout, bindSelectionToTerminal, enableTooltips, bindSidebarResizer, applyPreviewSize,
     animateLayout, restoreFileAreaIfHidden, showPreviewPanel, setPreviewMax, isPreviewMax, toggleSidebar,
   } = createPreviewController({
@@ -196,6 +201,10 @@ function setupControllers() {
     term: termProxy, toast, enterEditMode, enterImageEdit: (...args) => enterImageEdit(...args),
     openWith, copyPath, ic, isHtmlName, iconSvg, fmtTime, isMdName,
   }));
+  gitPanel = createGitPanel({
+    $, api, escapeHtml, ic, kindFromName, toast,
+    showDiff: (...args) => showDiff(...args),
+  });
   term = createTerminalController({
     $, state, follow, openWith, applyPreviewSize, animateLayout, updateWatches, escapeHtml, ic,
     baseOf, dirOf, navigate, renderBreadcrumb, playChime, toast, TERM_LINK_RE_BARE, api, apiPost,

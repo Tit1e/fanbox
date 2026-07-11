@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖文件读取 API、共享 state/runtime、编辑器与终端代理
- * [OUTPUT]: 对外提供 createPreviewController，管理文件预览、预览动作和窗口布局
+ * [INPUT]: 依赖文件与 Git Diff API、共享 state/runtime、编辑器与终端代理
+ * [OUTPUT]: 对外提供 createPreviewController，管理文件预览、单文件 Git Diff、预览动作和窗口布局
  * [POS]: public/modules 的预览与布局领域控制器，被文件浏览、编辑和文件跟随流程消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -142,15 +142,15 @@ async function showDiff(e) {
   mona.disposeIfAny(); crepe.disposeIfAny(); runtime.imgEditState = null;
   showPreviewPanel();
   applySelection(e.path);
-  $('#preview-title').textContent = (data.isNew ? '新增 · ' : '改动 · ') + e.name;
-  renderPreviewActions(e);
-  renderPreviewFoot(e);
+  $('#preview-title').textContent = (e.deleted ? '删除 · ' : data.isNew ? '新增 · ' : '改动 · ') + e.name;
+  if (e.deleted) { $('#preview-actions').innerHTML = ''; $('#preview-foot').innerHTML = ''; }
+  else { renderPreviewActions(e); renderPreviewFoot(e); }
   const body = $('#preview-body');
   body.innerHTML =
-    `<div class="editor-bar"><span class="editor-hint">${data.isNew ? '新文件（HEAD 中不存在）' : '左：HEAD　·　右：当前工作区'} · 只读</span><button id="diff-close" class="ghost-btn">返回预览</button></div>` +
+    `<div class="editor-bar"><span class="editor-hint">${data.isNew ? '新文件（HEAD 中不存在）' : e.deleted ? '文件已从工作区删除' : '左：HEAD　·　右：当前工作区'} · 只读</span><button id="diff-close" class="ghost-btn">${e.deleted ? '关闭' : '返回预览'}</button></div>` +
     `<div id="ed-host" class="mona-host"></div>`;
   mona.openDiff($('#ed-host'), data.original, data.modified, (e.name.split('.').pop() || '').toLowerCase());
-  $('#diff-close').onclick = () => openPreview(e);
+  $('#diff-close').onclick = () => e.deleted ? closePreview() : openPreview(e);
 }
 function renderPreviewActions(e) {
   const box = $('#preview-actions');
@@ -390,5 +390,5 @@ function toggleSidebar(force) {
   }
 }
 
-  return { openPreview, renderTextPreview, fsUrl, renderPreviewActions, renderPreviewFoot, closePreview, lightbox, applyLayout, bindSelectionToTerminal, enableTooltips, bindSidebarResizer, applyPreviewSize, animateLayout, restoreFileAreaIfHidden, showPreviewPanel, setPreviewMax, isPreviewMax: () => previewMax, toggleSidebar };
+  return { openPreview, showDiff, renderTextPreview, fsUrl, renderPreviewActions, renderPreviewFoot, closePreview, lightbox, applyLayout, bindSelectionToTerminal, enableTooltips, bindSidebarResizer, applyPreviewSize, animateLayout, restoreFileAreaIfHidden, showPreviewPanel, setPreviewMax, isPreviewMax: () => previewMax, toggleSidebar };
 }

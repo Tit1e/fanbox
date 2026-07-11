@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createFileActionsController(deps) {
-  const { $, state, api, apiPost, toast, loadFavorites, renderFavs, renderFiles, navigate, openPreview, setFileFollow, follow, term, mona, crepe, runtime, guardDirty, dirOf, fmtSize, escapeHtml, ic, svgWrap, SVG, showPreviewPanel, renderPreviewFoot, renderPreviewActions, isFav, renderBreadcrumb, renderTextPreview, isMdName, closePreview, lightbox, enterImageEdit } = deps;
+  const { $, state, api, apiPost, toast, loadFavorites, renderFavs, renderFiles, navigate, openPreview, setFileFollow, follow, term, mona, crepe, runtime, guardDirty, dirOf, fmtSize, escapeHtml, ic, svgWrap, SVG, showPreviewPanel, renderPreviewFoot, renderPreviewActions, isFav, renderBreadcrumb, renderTextPreview, isMdName, closePreview, lightbox, enterImageEdit, refreshGitStatus } = deps;
 // ---------- 操作 ----------
 // macOS 打开文件时 LaunchServices 会写 com.apple.lastuseddate#PS 扩展属性，FSEvents 据此连发事件——
 // 内容没动却会点亮「改」徽标。自己发起的打开记下路径，3 秒内该文件的变更事件按噪声丢弃
@@ -56,6 +56,7 @@ async function refresh() {
   state.breadcrumb = data.breadcrumb;
   renderBreadcrumb();
   renderFiles();
+  refreshGitStatus(state.cwd);
 }
 // 文本原地编辑：md → Milkdown Crepe 所见即所得；其它 → Monaco；都失败回退 textarea
 async function enterEditMode(e) {

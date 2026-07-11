@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 依赖文件 API、共享 state、终端与预览动作代理
- * [OUTPUT]: 对外提供 createFileBrowserController，管理导航、目录渲染、选择、拖放和键盘移动
+ * [INPUT]: 依赖文件/Git API、共享 state、终端、Git 状态与预览动作代理
+ * [OUTPUT]: 对外提供 createFileBrowserController，管理导航、目录渲染、Git 状态挂载、选择、拖放和键盘移动
  * [POS]: public/modules 的文件浏览领域控制器，被侧边栏、预览、终端和应用入口消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createFileBrowserController(deps) {
-  const { $, guardDirty, follow, restoreFileAreaIfHidden, api, toast, state, renderRootsActive, term, openPreview, setFileFollow, recordRecent, toggleFav, iconSvg, fmtSize, fmtTime, isFav, escapeHtml, openWith, showContextMenu, baseOf, ic, svgWrap, SVG, diskPanel, releasePanel, iconColorFor, refresh, kindFromName, setPreviewMax } = deps;
+  const { $, guardDirty, follow, restoreFileAreaIfHidden, api, toast, state, renderRootsActive, term, openPreview, setFileFollow, recordRecent, toggleFav, iconSvg, fmtSize, fmtTime, isFav, escapeHtml, openWith, showContextMenu, baseOf, ic, svgWrap, SVG, diskPanel, releasePanel, iconColorFor, refresh, kindFromName, setPreviewMax, loadGitStatus, renderGitStatus } = deps;
 // ---------- 导航 ----------
 async function navigate(p, pushHistory = true) {
   if (!await guardDirty()) return;
@@ -21,6 +21,7 @@ async function navigate(p, pushHistory = true) {
     state.parent = data.parent;
     state.cursor = -1;
     render();
+    loadGitStatus(state.cwd);
     renderRootsActive();
     // 联动：监听此目录 + 各终端项目目录的文件变化（agent 改文件→自动刷新）
     updateWatches();
@@ -100,7 +101,8 @@ function renderStatusbar() {
   const files = list.length - dirs;
   const bytes = list.reduce((a, e) => a + (e.isDir ? 0 : e.size || 0), 0);
   sb.classList.remove('hidden');
-  sb.innerHTML = `<span>${list.length} 项${dirs ? ` · ${dirs} 文件夹` : ''}${files ? ` · ${files} 文件 ${fmtSize(bytes)}` : ''}</span><span class="sb-links">${state.project ? '<a id="sb-rel" title="版本号→CHANGELOG→打包→push→Release 一条龙，在终端跑">发版</a>' : ''}<a id="sb-du" title="算上子目录的真实磁盘占用">占用透视</a></span>`;
+  sb.innerHTML = `<span>${list.length} 项${dirs ? ` · ${dirs} 文件夹` : ''}${files ? ` · ${files} 文件 ${fmtSize(bytes)}` : ''}</span><span class="sb-links"><span id="git-status-slot"></span>${state.project ? '<a id="sb-rel" title="版本号→CHANGELOG→打包→push→Release 一条龙，在终端跑">发版</a>' : ''}<a id="sb-du" title="算上子目录的真实磁盘占用">占用透视</a></span>`;
+  renderGitStatus();
   $('#sb-du').onclick = () => diskPanel(state.cwd);
   const rel = $('#sb-rel'); if (rel) rel.onclick = () => releasePanel();
 }

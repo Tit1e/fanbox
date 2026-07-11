@@ -40,7 +40,7 @@ const { listDir, readFile, searchFiles, grepFiles, contentSearch, mdfind } = cre
   ext,
   ignoreDirs: IGNORE_DIRS,
 });
-const { gitStatus, gitFileDiff } = createGitService({ resolvePath, textExt: TEXT_EXT, ext });
+const { gitStatus, gitFileDiff } = createGitService({ resolvePath, kindOf });
 const { writeTextFile, trashPath, renamePath, movePath, createEntry, termVerify, locatePath, saveImage, openInOS, defaultRoots, shellQuote } = createFileService({
   home: HOME, platform: PLATFORM, resolvePath, textExt: TEXT_EXT, ext, searchFiles, mdfind,
 });

@@ -64,6 +64,11 @@ window.CODEXBOX_DICT = {
   '占用透视': 'Disk usage',
   '算上子目录的真实磁盘占用': 'True disk usage including subfolders',
   '改': 'edited',
+  'Git 检查中…': 'Checking Git…',
+  '本机 Git 不可用': 'Git is unavailable',
+  '当前目录不是 Git 仓库': 'This folder is not a Git repository',
+  '工作区干净': 'Working tree clean',
+  '二进制文件不支持内容比较': 'Binary files cannot be compared',
 
   // ---------- 右键菜单 ----------
   '打开': 'Open',
@@ -90,6 +95,7 @@ window.CODEXBOX_DICT = {
   '拖动调整大小': 'Drag to resize',
   '默认应用打开': 'Open with default app',
   '查看改动（HEAD vs 当前）': 'View changes (HEAD vs current)',
+  '文件已从工作区删除': 'File deleted from working tree',
   '复制图片（可粘贴到其它应用）': 'Copy image (paste into other apps)',
   '复制文件（访达里可粘贴）': 'Copy file (paste in Finder)',
   '这个文件类型无法预览': "Can't preview this file type",
@@ -383,6 +389,8 @@ window.CODEXBOX_DICT_RULES = [
   [/^共 (.+?)( · 只显示前 (\d+) 项)?$/, (m) => `Total ${m[1]}${m[3] ? ` · top ${m[3]} shown` : ''}`],
   // 命令面板
   [/^当前目录 (.+)$/, (m) => `This folder ${m[1]}`],
+  [/^(.+) · (\d+) 个文件 · \+(\d+) −(\d+)$/, (m) => `${m[1]} · ${m[2]} files · +${m[3]} −${m[4]}`],
+  [/^(.+) · (\d+) 个文件$/, (m) => `${m[1]} · ${m[2]} files`],
   // 终端
   [/^已在终端启动 (.+)$/, (m) => `Started ${m[1]} in terminal`],
   [/^没有第 (\d+) 个终端标签$/, (m) => `There is no terminal tab ${m[1]}`],

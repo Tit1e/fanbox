@@ -1,6 +1,6 @@
 <!--
   [INPUT]: 依赖 styles/ 样式分片、app.js、i18n.js 和本地 vendor 浏览器资源
-  [OUTPUT]: 对外提供 CodexBox 单页应用的文件区、预览区、终端区和通用弹层 DOM 骨架
+  [OUTPUT]: 对外提供 CodexBox 单页应用的文件区、Git 变更弹层、预览区、终端区和通用弹层 DOM 骨架
   [POS]: public 模块的页面入口，定义渲染层组件挂载点与脚本加载顺序
   [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 -->
@@ -146,6 +146,7 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+  <div id="git-popover" class="git-popover hidden"></div>
 
   <!-- marked / highlight.js：本地 vendor，离线可用，数据不出本机 -->
   <script src="/vendor/marked/marked.min.js" onerror="window.__noMarked=1"></script>

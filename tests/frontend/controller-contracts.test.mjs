@@ -16,6 +16,7 @@ const { createFileBrowserController } = await loadRendererModule('file-browser')
 const { createFileFollowController } = await loadRendererModule('file-follow');
 const { createIcons } = await loadRendererModule('icons');
 const { createImageEditor } = await loadRendererModule('image-editor');
+const { createGitPanel } = await loadRendererModule('git-panel');
 const { createPreviewController } = await loadRendererModule('preview');
 const { createSidebarController } = await loadRendererModule('sidebar');
 const { createTerminalController } = await loadRendererModule('terminal');
@@ -51,6 +52,7 @@ test('所有渲染层控制器工厂可独立装配并保持公开接口', () =>
     assert.equal(typeof createFileBrowserController(deps).navigate, 'function');
     assert.equal(typeof createFileFollowController(deps).setFileFollow, 'function');
     assert.equal(typeof createImageEditor(deps).enterImageEdit, 'function');
+    assert.equal(typeof createGitPanel(deps).load, 'function');
     assert.equal(typeof createPreviewController(deps).openPreview, 'function');
     assert.equal(typeof createSidebarController(deps).loadCodexProjects, 'function');
     assert.equal(typeof createTerminalController(deps).openInDir, 'function');
