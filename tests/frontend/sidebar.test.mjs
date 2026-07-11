@@ -43,14 +43,14 @@ function createHarness(responses = {}) {
       return responses.confirm !== false;
     },
     popupMenu: (_event, items) => { menuItems = items; },
+    codexProjects: { render: () => {}, setActive: () => {} },
   });
   return { controller, calls, getMenuItems: () => menuItems };
 }
 
 async function openProjectMenu(harness) {
   await harness.controller.loadCodexProjects();
-  const item = document.querySelector('#codex-projects-list li');
-  item.dispatchEvent(new window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+  harness.controller.showCodexProjectMenu(new window.MouseEvent('contextmenu', { cancelable: true }), PROJECT);
   return harness.getMenuItems();
 }
 

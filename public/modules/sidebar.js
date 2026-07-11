@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 依赖 DOM/API 基础能力、共享 state、导航与通用弹层回调
- * [OUTPUT]: 对外提供 createSidebarController，管理根目录、收藏和 Codex 项目列表
+ * [INPUT]: 依赖 DOM/API 基础能力、共享 state、导航、通用弹层回调与 Svelte Codex 项目列表服务
+ * [OUTPUT]: 对外提供 createSidebarController，管理根目录、收藏和 Codex 项目业务
  * [POS]: public/modules 的侧边栏领域控制器，被应用入口初始化和导航流程消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createSidebarController(deps) {
-  const { $, api, apiPost, state, svgWrap, SVG, escapeHtml, dirOf, navigate, makeDraggablePath, openPreview, renderFiles, toggleFav, toast, confirmDialog, popupMenu } = deps;
+  const { $, api, apiPost, state, svgWrap, SVG, escapeHtml, dirOf, navigate, makeDraggablePath, openPreview, renderFiles, toggleFav, toast, confirmDialog, popupMenu, codexProjects } = deps;
 // ---------- 侧边栏 ----------
 // 侧栏目录树：目录项带展开箭头，点箭头逐级懒加载子目录（只列文件夹），点行本身仍是跳转
 function navDirLi(name, p) {
@@ -53,10 +53,11 @@ async function loadRoots() {
 }
 function renderRootsActive() {
   // 快速入口 / 收藏 / Codex 项目三个列表统一高亮「当前所在目录」，让用户清楚自己点开/身处哪一项
-  ['#roots-list', '#favs-list', '#codex-projects-list'].forEach((sel) => {
+  ['#roots-list', '#favs-list'].forEach((sel) => {
     const ul = $(sel); if (!ul) return;
     ul.querySelectorAll('li').forEach((li) => li.classList.toggle('active', li.dataset.path === state.cwd));
   });
+  codexProjects.setActive(state.cwd);
 }
 async function loadFavorites() {
   const data = await api('/api/favorites');
@@ -89,25 +90,6 @@ function renderFavs() {
   renderRootsActive(); // 重渲后补一次高亮，让「当前所在的收藏」保持选中态
 }
 // Codex 项目：从本机 Codex 会话日志发现最近处理过的项目文件夹
-function agoShort(ms) {
-  const m = Math.round((Date.now() - ms) / 60000);
-  if (m < 2) return '刚刚';
-  if (m < 60) return m + ' 分';
-  if (m < 1440) return Math.round(m / 60) + ' 时';
-  return Math.round(m / 1440) + ' 天';
-}
-function refreshCodexProjectTimes(list) {
-  const items = $('#codex-projects-list').querySelectorAll('li');
-  list.forEach((pj, i) => {
-    const li = items[i];
-    if (!li) return;
-    const ago = agoShort(pj.lastActive);
-    const label = li.querySelector('.label');
-    const when = li.querySelector('.when');
-    if (label) label.title = `${pj.path}\nCodex · ${ago}前活跃`;
-    if (when) when.textContent = ago;
-  });
-}
 const codexProjectActions = new Set();
 async function runCodexProjectAction(pj, action) {
   if (codexProjectActions.has(pj.path)) return;
@@ -125,7 +107,6 @@ async function runCodexProjectAction(pj, action) {
     if (!result.ok) { toast(result.error || `${verb}失败`, true); }
     else { toast(action === 'archive' ? `已归档 ${result.succeeded} 条会话` : `已删除 ${result.succeeded} 条会话`); }
     if (result.succeeded) {
-      loadCodexProjects._sig = null;
       await loadCodexProjects();
     }
   } catch {
@@ -146,26 +127,9 @@ async function loadCodexProjects() {
   let data;
   try { data = await api('/api/codex-projects'); } catch { return; }
   const list = (data.projects || []).slice(0, 8);
-  // 数据没变时只更新时间文字，避免定时刷新把用户展开的子树抹掉。
-  const sig = JSON.stringify(list);
-  if (sig === loadCodexProjects._sig) { refreshCodexProjectTimes(list); return; }
-  loadCodexProjects._sig = sig;
-  const ul = $('#codex-projects-list');
-  ul.innerHTML = '';
-  if (!list.length) { ul.innerHTML = '<div class="nav-empty">用 Codex 跑过的项目会出现在这里</div>'; return; }
-  list.forEach((pj) => {
-    const li = navDirLi(pj.name, pj.path);
-    li.querySelector('.label').title = `${pj.path}\nCodex · ${agoShort(pj.lastActive)}前活跃`;
-    const when = document.createElement('span');
-    when.className = 'when';
-    when.append(agoShort(pj.lastActive));
-    li.appendChild(when);
-    li.oncontextmenu = (ev) => showCodexProjectMenu(ev, pj);
-    ul.appendChild(li);
-  });
-  renderRootsActive(); // 重渲后补一次高亮，让「当前所在的 Codex 项目」保持选中态
+  codexProjects.render(list, state.cwd);
 }
 
 
-  return { loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects };
+  return { loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects, showCodexProjectMenu };
 }

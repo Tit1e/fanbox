@@ -20,7 +20,7 @@ import { createUiController } from './modules/ui-controller.js';
 import { startApplication } from './modules/lifecycle.js';
 import { createEffects } from './modules/effects.js';
 import { guardEditExit } from './modules/edit-session.js';
-import { createContextMenuService, createDialogService, createDiskPanelService, createGitPanel, createReleasePanelService } from './generated/ui.mjs';
+import { createCodexProjectsService, createContextMenuService, createDialogService, createDiskPanelService, createGitPanel, createReleasePanelService } from './generated/ui.mjs';
 
 const $ = (s) => document.querySelector(s);
 const api = (p) => fetch(p).then((r) => r.json());
@@ -132,7 +132,7 @@ let animateLayout, restoreFileAreaIfHidden, showPreviewPanel, setPreviewMax, isP
 let selfOpened, openWith, copyPath, recordRecent, toggleFav, refresh, enterEditMode, mdEditor;
 let doRename, doTrash, doCreate, inputDialog, confirmDialog, organizeLaunch, releasePanel, diskPanel;
 let showContextMenu, popupMenu, shotTray;
-let loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects;
+let loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects, showCodexProjectMenu;
 let cmdk;
 let term;
 let gitPanel;
@@ -147,6 +147,13 @@ const dialogService = createDialogService();
 const contextMenuService = createContextMenuService();
 const diskPanelService = createDiskPanelService({ api, formatSize: fmtSize, parentOf: dirOf, separatorOf: () => state.sep, homeOf: () => state.home });
 const releasePanelService = createReleasePanelService({ api, apiPost, notify: toast, runCommand: (...args) => term?.runInDir(...args) });
+const codexProjectsService = createCodexProjectsService({
+  target: $('#codex-projects-list'), api,
+  navigate: (...args) => navigate(...args),
+  makeDraggable: (...args) => makeDraggablePath(...args),
+  openMenu: (...args) => showCodexProjectMenu(...args),
+  folderIcon: svgWrap(SVG.folder, 'currentColor', 16, true),
+});
 
 
 function setupControllers() {
@@ -235,10 +242,10 @@ function setupControllers() {
     baseOf, refresh, runtime,
   }));
   ({
-    loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects,
+    loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects, showCodexProjectMenu,
   } = createSidebarController({
     $, api, apiPost, state, SVG, svgWrap, escapeHtml, dirOf, navigate, makeDraggablePath,
-    openPreview, renderFiles, toggleFav, toast, confirmDialog, popupMenu,
+    openPreview, renderFiles, toggleFav, toast, confirmDialog, popupMenu, codexProjects: codexProjectsService,
   }));
   cmdk = createCommandPalette({
     $, api, state, tilde, iconSvg, escapeHtml, openWith, navigate, recordRecent, dirOf,
