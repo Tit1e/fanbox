@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createFileActionsController(deps) {
-  const { $, state, api, apiPost, toast, inputDialog, confirmDialog, popupMenu, closeContextMenu, loadFavorites, renderFavs, renderFiles, navigate, openPreview, setFileFollow, follow, term, mona, crepe, runtime, guardDirty, dirOf, fmtSize, escapeHtml, ic, svgWrap, SVG, showPreviewPanel, renderPreviewFoot, renderPreviewActions, isFav, renderBreadcrumb, renderTextPreview, isMdName, closePreview, lightbox, enterImageEdit, refreshGitStatus } = deps;
+  const { $, state, api, apiPost, toast, inputDialog, confirmDialog, popupMenu, closeContextMenu, diskPanel, loadFavorites, renderFavs, renderFiles, navigate, openPreview, setFileFollow, follow, term, mona, crepe, runtime, guardDirty, dirOf, fmtSize, escapeHtml, ic, svgWrap, SVG, showPreviewPanel, renderPreviewFoot, renderPreviewActions, isFav, renderBreadcrumb, renderTextPreview, isMdName, closePreview, lightbox, enterImageEdit, refreshGitStatus } = deps;
 // ---------- 操作 ----------
 // macOS 打开文件时 LaunchServices 会写 com.apple.lastuseddate#PS 扩展属性，FSEvents 据此连发事件——
 // 内容没动却会点亮「改」徽标。自己发起的打开记下路径，3 秒内该文件的变更事件按噪声丢弃
@@ -445,38 +445,6 @@ async function releasePanel() {
     close();
     term.runInDir(dirPath, r.cmd, `v${version} 发版序列已在终端开跑`);
   };
-}
-
-// 磁盘占用透视：du 口径的真实占用条形榜，目录行可下钻
-async function diskPanel(dirPath) {
-  const old = $('.disk-overlay'); if (old) old.remove();
-  const ov = document.createElement('div');
-  ov.className = 'input-overlay disk-overlay';
-  ov.innerHTML = `<div class="input-dialog disk-dialog">
-    <div class="input-title disk-title"></div>
-    <div class="disk-body"><div class="cmdk-loading">计算中…（大目录会慢几秒）</div></div></div>`;
-  document.body.appendChild(ov);
-  const onKey = (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); close(); } };
-  const close = () => { ov.remove(); document.removeEventListener('keydown', onKey, true); };
-  ov.onclick = (ev) => { if (ev.target === ov) close(); };
-  document.addEventListener('keydown', onKey, true);
-  const load = async (p) => {
-    ov.querySelector('.disk-title').textContent = '磁盘占用 · ' + p.replace(state.home, '~');
-    const body = ov.querySelector('.disk-body');
-    body.innerHTML = '<div class="cmdk-loading">计算中…（大目录会慢几秒）</div>';
-    const d = await api('/api/du?path=' + encodeURIComponent(p));
-    if (!d.ok) { body.innerHTML = `<div class="empty-state">${escapeHtml(d.error || '读取失败')}</div>`; return; }
-    const max = d.items.length ? d.items[0].size : 1;
-    const up = p !== '/' ? `<div class="disk-row disk-up" data-dir="${escapeHtml(dirOf(p))}"><span class="disk-name">↑ 上一级</span></div>` : '';
-    body.innerHTML = `<div class="disk-total">共 ${fmtSize(d.total)}${d.more ? ` · 只显示前 ${d.items.length} 项` : ''}</div>` + up +
-      d.items.map((it) => `<div class="disk-row${it.isDir ? ' is-dir' : ''}" data-dir="${it.isDir ? escapeHtml(p + '/' + it.name) : ''}">
-        <i class="disk-bar" style="width:${Math.max(1, Math.round(it.size / max * 100))}%"></i>
-        <span class="disk-name">${it.isDir ? '📁 ' : ''}${escapeHtml(it.name)}</span><span class="disk-size">${fmtSize(it.size)}</span></div>`).join('');
-    body.querySelectorAll('.disk-row[data-dir]').forEach((r) => {
-      if (r.dataset.dir) r.onclick = () => load(r.dataset.dir);
-    });
-  };
-  load(dirPath);
 }
 
 // 右键上下文菜单：业务层只组装动作，渲染、定位和关闭生命周期交给 Svelte 服务。

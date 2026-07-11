@@ -20,7 +20,7 @@ import { createUiController } from './modules/ui-controller.js';
 import { startApplication } from './modules/lifecycle.js';
 import { createEffects } from './modules/effects.js';
 import { guardEditExit } from './modules/edit-session.js';
-import { createContextMenuService, createDialogService, createGitPanel } from './generated/ui.mjs';
+import { createContextMenuService, createDialogService, createDiskPanelService, createGitPanel } from './generated/ui.mjs';
 
 const $ = (s) => document.querySelector(s);
 const api = (p) => fetch(p).then((r) => r.json());
@@ -145,6 +145,7 @@ let setFileFollow, rememberFollowChange, followChange;
 const { isNoisyChange, kindFromName, rippleFileArea, playChime } = createEffects(state, $);
 const dialogService = createDialogService();
 const contextMenuService = createContextMenuService();
+const diskPanelService = createDiskPanelService({ api, formatSize: fmtSize, parentOf: dirOf, separatorOf: () => state.sep, homeOf: () => state.home });
 
 
 function setupControllers() {
@@ -165,6 +166,7 @@ function setupControllers() {
     confirmDialog: dialogService.confirmDialog,
     popupMenu: contextMenuService.popupMenu,
     closeContextMenu: contextMenuService.closeContextMenu,
+    diskPanel: diskPanelService.diskPanel,
     loadFavorites: (...args) => loadFavorites(...args),
     renderFavs: (...args) => renderFavs(...args),
     renderFiles: (...args) => renderFiles(...args),
