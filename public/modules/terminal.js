@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createTerminalController(deps) {
-  const { $, state, follow, openWith, applyPreviewSize, animateLayout, updateWatches, escapeHtml, ic, baseOf, dirOf, navigate, renderBreadcrumb, playChime, toast, TERM_LINK_RE_BARE, api, apiPost, shQuote, applySelection, openPreview, recordRecent, codexResumeLast, setPreviewMax, isMdName, isHtmlName, popupMenu, rippleFileArea } = deps;
+  const { $, state, follow, openWith, applyPreviewSize, animateLayout, updateWatches, escapeHtml, ic, baseOf, dirOf, navigate, renderBreadcrumb, playChime, toast, TERM_LINK_RE_BARE, api, apiPost, shQuote, applySelection, openPreview, recordRecent, codexResumeLast, setPreviewMax, isMdName, isHtmlName, popupMenu, rippleFileArea, confirmDialog } = deps;
 // ---------- 内嵌终端（仅桌面 app；浏览器版优雅降级）----------
 // Codex「等你拍板」界面特征，宁缺勿滥：
 // 不命中只是退化成「任务完成」标题，不会漏响）
@@ -531,6 +531,28 @@ const term = {
     if (!this.sessions.length) { this.close(); return; }
     if (this.active === id) this.activate(this.sessions[Math.max(0, i - 1)].id);
     else this.renderTabs();
+  },
+  async closeActive() {
+    const session = this.sessions.find((x) => x.id === this.active);
+    if (!session) return false;
+    if (session.status === 'busy') {
+      if (this._closePrompting) return false;
+      this._closePrompting = true;
+      try {
+        const confirmed = await confirmDialog('当前终端仍在运行任务，关闭会立即终止任务。确定关闭？');
+        if (!confirmed) return false;
+      } finally { this._closePrompting = false; }
+    }
+    this.closeTab(session.id);
+    return true;
+  },
+  bindDesktopEvents() {
+    if (window.codexboxWin?.onNewTerminal && !this._removeNewTerminal) {
+      this._removeNewTerminal = window.codexboxWin.onNewTerminal(() => this.newTab());
+    }
+    if (window.codexboxWin?.onCloseActiveTerminal && !this._removeCloseActiveTerminal) {
+      this._removeCloseActiveTerminal = window.codexboxWin.onCloseActiveTerminal(() => this.closeActive());
+    }
   },
   fitActive() {
     const s = this.sessions.find((x) => x.id === this.active);

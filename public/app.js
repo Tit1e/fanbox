@@ -210,8 +210,9 @@ function setupControllers() {
     baseOf, dirOf, navigate, renderBreadcrumb, playChime, toast, TERM_LINK_RE_BARE, api, apiPost,
     shQuote, applySelection, openPreview, recordRecent,
     codexResumeLast: (...args) => codexResumeLast(...args), setPreviewMax, isMdName, isHtmlName,
-    popupMenu, rippleFileArea,
+    popupMenu, rippleFileArea, confirmDialog,
   });
+  term.bindDesktopEvents();
   ({ setFileFollow, rememberFollowChange, followChange } = createFileFollowController({
     $, state, follow, term, api, openPreview, navigate, renderFiles, refresh, applySelection,
     renderPreviewFoot, renderPreviewActions, showPreviewPanel, fsUrl, escapeHtml, iconSvg, fmtSize,

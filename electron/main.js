@@ -395,7 +395,17 @@ function buildMenu() {
     ] }] : []),
     { label: M('文件', 'File'), submenu: [
       ...(isMac ? [] : [{ label: M('检查更新…', 'Check for Updates…'), click: () => checkUpdate({ manual: true }) }, { type: 'separator' }]),
-      isMac ? { role: 'close' } : { role: 'quit' },
+      {
+        label: M('新建终端', 'New Terminal'),
+        accelerator: 'CmdOrCtrl+T',
+        click: () => send('terminal:new'),
+      },
+      {
+        label: M('关闭当前终端', 'Close Active Terminal'),
+        accelerator: 'CmdOrCtrl+W',
+        click: () => send('terminal:close-active'),
+      },
+      ...(!isMac ? [{ type: 'separator' }, { role: 'quit' }] : []),
     ] },
     { label: M('编辑', 'Edit'), submenu: [
       { role: 'undo', label: M('撤销', 'Undo') }, { role: 'redo', label: M('重做', 'Redo') }, { type: 'separator' },
