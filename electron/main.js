@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 Electron 窗口/菜单/IPC 能力、各领域服务、../server.js 本地服务与 ../port-config.js 端口配置
+ * [INPUT]: 依赖 Electron 窗口/菜单/IPC 能力、PTY/退出等领域服务、../server.js 本地服务与 ../port-config.js 端口配置
  * [OUTPUT]: 对外提供 CodexBox 桌面主进程、PTY 与文件/剪贴板/更新 IPC、原生菜单和窗口生命周期
  * [POS]: electron 模块的主进程编排器，与 preload.js 协作连接渲染层、本地服务和操作系统
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -17,6 +17,7 @@ const { createPtyService } = require('./pty-service');
 const { createFileWatchService } = require('./file-watch-service');
 const { createSystemFileService } = require('./system-file-service');
 const { createLidGuard } = require('./power-service');
+const { createQuitGuard } = require('./quit-service');
 
 const APP_NAME = 'CodexBox';
 app.setName(APP_NAME);
@@ -86,7 +87,7 @@ function createWindow() {
   // macOS：点左上角红叉只隐藏到 Dock（保活渲染进程，所有界面/终端状态原样保留），真正退出走 ⌘Q。
   win.on('close', (e) => {
     saveBounds();
-    if (process.platform === 'darwin' && !isQuitting) { e.preventDefault(); win.hide(); }
+    if (process.platform === 'darwin' && !quitGuard.isQuitting()) { e.preventDefault(); win.hide(); }
   });
 
   // 等后端起来再加载（首次 listen 有几十毫秒延迟）
@@ -437,31 +438,9 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
   else if (win && !win.isDestroyed()) { win.show(); win.focus(); } // 从 Dock 点回来：显示隐藏的窗口，状态原样还在
 });
-// ⌘Q 兜底：还有终端在跑时（agent 任务），退出前确认，避免手滑全灭
-let isQuitting = false; // 真正退出（⌘Q / 菜单退出）才置真；点红叉只隐藏不退出，见 win.on('close')
-let quitPrompting = false;
-app.on('before-quit', (e) => {
-  if (isQuitting || terminalCount === 0) { isQuitting = true; return; }
-  e.preventDefault();
-  if (quitPrompting) return;
-  quitPrompting = true;
-  dialog.showMessageBox(win && !win.isDestroyed() ? win : undefined, {
-    type: 'warning',
-    buttons: [M('取消', 'Cancel'), M('退出', 'Quit')],
-    defaultId: 0,
-    cancelId: 0,
-    message: M(`还有 ${terminalCount} 个终端会话在运行`, `${terminalCount} terminal session(s) still running`),
-    detail: M('退出会终止正在运行的 agent 任务，确定退出？', 'Quitting will terminate running agent tasks. Quit anyway?'),
-  }).then(({ response }) => {
-    quitPrompting = false;
-    if (response !== 1) return;
-    // 当前 before-quit 已经被取消；等异步确认返回后再发起一次全新的退出事务。
-    isQuitting = true;
-    app.quit();
-  }).catch(() => {
-    quitPrompting = false;
-  });
-});
+// ⌘Q 只保护确实存在前台任务的终端；空闲 Shell 不阻止退出。
+const quitGuard = createQuitGuard({ app, dialog, ptyService, getWindow: () => win, translate: M });
+app.on('before-quit', (event) => quitGuard.handleBeforeQuit(event));
 app.on('window-all-closed', () => {
   ptyService.killAll();
   watchService.closeAll();

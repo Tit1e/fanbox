@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Node.js 测试库与 electron/pty-service.js 的注入式终端服务
- * [OUTPUT]: 验证 PTY 生命周期、事件转发、重复 ID 和输入尺寸边界
+ * [OUTPUT]: 验证 PTY 生命周期、事件转发、重复 ID、输入尺寸、前台进程与运行任务统计
  * [POS]: tests/electron 的终端领域服务单元测试，不启动 Electron 或真实 shell
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -54,6 +54,32 @@ test('前台进程查询拒绝非法或不存在的终端', async () => {
   const service = createPtyService({ pty: null });
   assert.deepEqual(await service.hasForegroundProcess({ id: '../bad' }), { ok: false, running: false });
   assert.deepEqual(await service.hasForegroundProcess({ id: 'missing' }), { ok: false, running: false });
+});
+
+test('运行任务统计只计算确认存在前台进程的终端', async () => {
+  let nextPid = 40;
+  const pty = { spawn() {
+    const terminal = {
+      pid: ++nextPid,
+      write() {}, resize() {}, kill() {}, onData() {}, onExit() {},
+    };
+    return terminal;
+  } };
+  const service = createPtyService({
+    pty,
+    foregroundProcess: async (pid) => {
+      if (pid === 42) return { ok: true, running: true };
+      if (pid === 43) return { ok: false, running: false };
+      if (pid === 44) throw new Error('ps failed');
+      return { ok: true, running: false };
+    },
+  });
+  for (let index = 1; index <= 4; index++) {
+    assert.equal(service.spawn({ id: `term_${index}`, cwd: process.cwd() }).ok, true);
+  }
+  assert.equal(await service.countRunningTasks(), 1);
+  service.killAll();
+  assert.equal(await service.countRunningTasks(), 0);
 });
 
 test('前台进程组区别于 Shell 进程组时识别为运行中', async () => {

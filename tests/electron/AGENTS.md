@@ -8,6 +8,7 @@ packaging-hook.test.js: macOS 发布包 node-pty spawn-helper 可执行权限与
 power-service.test.js: 注入系统命令验证合盖运行意图、生效、失败回退和退出恢复
 preload-contract.test.js: preload 暴露频道与主进程注册频道一致性测试
 pty-service.test.js: 注入假 PTY 验证终端生命周期、事件转发、路径解码和前台进程组识别
+quit-service.test.js: 注入应用、弹窗与 PTY 统计验证空闲直退、任务确认、取消和退出请求去重
 system-file-service.test.js: 临时目录中的拖入落盘、同名避让、目录边界和图片剪贴板测试
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 node-pty、Node.js 文件/进程能力与 ipc-validation.js 安全契约
- * [OUTPUT]: 对外提供 createPtyService，统一管理终端创建、输入、尺寸、目录、前台进程查询和销毁
+ * [OUTPUT]: 对外提供 createPtyService，统一管理终端创建、输入、尺寸、目录、前台进程查询、运行任务统计和销毁
  * [POS]: electron 模块的终端领域服务，由 main.js 装配并被 IPC 处理器调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -121,13 +121,25 @@ function createPtyService({ pty, send = () => {}, onCountChange = () => {}, fore
     return foregroundProcess(terminal.pid);
   }
 
+  async function countRunningTasks() {
+    const checks = [...terminals.values()].map(async (terminal) => {
+      if (!terminal.pid) return false;
+      try {
+        const result = await foregroundProcess(terminal.pid);
+        return result.ok === true && result.running === true;
+      } catch { return false; }
+    });
+    const results = await Promise.all(checks);
+    return results.filter(Boolean).length;
+  }
+
   function killAll() {
     terminals.forEach((terminal) => { try { terminal.kill(); } catch { /* */ } });
     terminals.clear();
     notifyCount();
   }
 
-  return { spawn, input, resize, kill, cwd, hasForegroundProcess, killAll, count: () => terminals.size };
+  return { spawn, input, resize, kill, cwd, hasForegroundProcess, countRunningTasks, killAll, count: () => terminals.size };
 }
 
 module.exports = { createPtyService, decodeLsofPath, termCwdByPid, foregroundProcessByPid };
