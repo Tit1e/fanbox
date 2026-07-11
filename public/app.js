@@ -20,7 +20,7 @@ import { createUiController } from './modules/ui-controller.js';
 import { startApplication } from './modules/lifecycle.js';
 import { createEffects } from './modules/effects.js';
 import { guardEditExit } from './modules/edit-session.js';
-import { createCodexProjectsService, createContextMenuService, createDialogService, createDiskPanelService, createFavoritesService, createGitPanel, createReleasePanelService, createRootsService } from './generated/ui.mjs';
+import { createCodexProjectsService, createContextMenuService, createDialogService, createDiskPanelService, createFavoritesService, createFileListService, createGitPanel, createReleasePanelService, createRootsService } from './generated/ui.mjs';
 
 const $ = (s) => document.querySelector(s);
 const api = (p) => fetch(p).then((r) => r.json());
@@ -169,6 +169,12 @@ const rootsService = createRootsService({
   makeDraggable: (...args) => makeDraggablePath(...args),
   folderIcon: svgWrap(SVG.folder, 'currentColor', 16, true),
 });
+const fileListService = createFileListService({
+  target: $('#file-area'), iconSvg, iconColorFor,
+  formatSize: fmtSize, formatTime: fmtTime,
+  favoriteIcon: (on) => svgWrap(SVG.star, 'currentColor', 15, on),
+  emptyIcon: ic('inbox', 'currentColor', 48),
+});
 
 
 function setupControllers() {
@@ -219,7 +225,7 @@ function setupControllers() {
     openPreview: (...args) => openPreview(...args), setFileFollow: (...args) => setFileFollow(...args),
     recordRecent, toggleFav, iconSvg, fmtSize, fmtTime, isFav, escapeHtml, openWith,
     showContextMenu, baseOf, ic, svgWrap, SVG, diskPanel, releasePanel, iconColorFor, refresh,
-    kindFromName, setPreviewMax: (...args) => setPreviewMax(...args),
+    kindFromName, setPreviewMax: (...args) => setPreviewMax(...args), fileList: fileListService,
     loadGitStatus: (...args) => gitPanel?.load(...args),
     renderGitStatus: (...args) => gitPanel?.render(...args),
   }));

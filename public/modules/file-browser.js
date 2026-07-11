@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 依赖文件/Git API、共享 state、终端、Git 状态与预览动作代理
- * [OUTPUT]: 对外提供 createFileBrowserController，管理导航、目录渲染、Git 状态挂载、选择、拖放和键盘移动
+ * [INPUT]: 依赖文件/Git API、共享 state、Svelte 文件列表、终端、Git 状态与预览动作代理
+ * [OUTPUT]: 对外提供 createFileBrowserController，管理导航、文件视图模型、Git 状态、选择、拖放和键盘移动
  * [POS]: public/modules 的文件浏览领域控制器，被侧边栏、预览、终端和应用入口消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createFileBrowserController(deps) {
-  const { $, guardDirty, follow, restoreFileAreaIfHidden, api, toast, state, renderRootsActive, term, openPreview, setFileFollow, recordRecent, toggleFav, iconSvg, fmtSize, fmtTime, isFav, escapeHtml, openWith, showContextMenu, baseOf, ic, svgWrap, SVG, diskPanel, releasePanel, iconColorFor, refresh, kindFromName, setPreviewMax, loadGitStatus, renderGitStatus } = deps;
+  const { $, guardDirty, follow, restoreFileAreaIfHidden, api, toast, state, renderRootsActive, term, openPreview, setFileFollow, recordRecent, toggleFav, fmtSize, escapeHtml, openWith, showContextMenu, baseOf, diskPanel, releasePanel, refresh, kindFromName, setPreviewMax, loadGitStatus, renderGitStatus, fileList } = deps;
 // ---------- 导航 ----------
 async function navigate(p, pushHistory = true) {
   if (!await guardDirty()) return;
@@ -107,116 +107,27 @@ function renderStatusbar() {
   const rel = $('#sb-rel'); if (rel) rel.onclick = () => releasePanel();
 }
 function renderFiles() {
-  const area = $('#file-area');
   const list = visibleEntries();
   state.visible = list;
   renderStatusbar();
-  if (!list.length) {
-    area.innerHTML = `<div class="empty-state"><div class="big">${ic('inbox', 'currentColor', 48)}</div>这个文件夹是空的</div>`;
-    return;
-  }
-  if (state.view === 'list') {
-    const wrap = document.createElement('div');
-    wrap.className = 'list';
-    const head = document.createElement('div');
-    head.className = 'row list-head';
-    head.innerHTML = `<div></div><div>名称</div><div>修改时间</div><div>大小</div><div></div>`;
-    wrap.appendChild(head);
-    list.forEach((e, i) => wrap.appendChild(listRow(e, i)));
-    area.innerHTML = '';
-    area.appendChild(wrap);
-    state.cols = 1;
-    highlightCursor();
-    return;
-  }
-  // 至此只剩网格视图（列表/最近已在上面提前返回）
-  const grid = document.createElement('div');
-  grid.className = 'grid size-' + state.gridSize;
-  list.forEach((e, i) => grid.appendChild(gridItem(e, i)));
-  area.innerHTML = '';
-  area.appendChild(grid);
-  measureCols();
-  highlightCursor();
-}
-function measureCols() {
-  const items = $('#file-area').querySelectorAll('.item');
-  if (!items.length) { state.cols = 1; return; }
-  const top0 = items[0].offsetTop;
-  let c = 0;
-  for (const it of items) { if (it.offsetTop === top0) c++; else break; }
-  state.cols = Math.max(1, c);
-}
-function favBtn(e) {
-  const on = isFav(e.path);
-  return `<span class="fav-btn ${on ? 'on' : ''}" title="收藏">${svgWrap(SVG.star, 'currentColor', 15, on)}</span>`;
-}
-function thumbHtml(e) {
-  // 关键性能修复：用缩略图端点（sips/qlmanage 缓存小图），不再把原图/原视频整文件拉进来解码
-  if (e.kind === 'image' || e.kind === 'video') {
-    const w = state.gridSize === 'lg' ? 320 : (state.gridSize === 'sm' ? 160 : 240);
-    const fb = e.kind === 'video' ? 'window.__svgVideo' : 'window.__svgImg';
-    // 照片按原比例呈现（object-fit:contain）+ 柔和投影，像散落的照片；缩略图失败回退强色字形
-    const img = `<img class="thumb" loading="lazy" decoding="async" src="/api/thumb?path=${encodeURIComponent(e.path)}&w=${w}&v=${e.mtime || 0}" alt="" onerror="this.closest('.thumb-wrap').replaceWith(Object.assign(document.createElement('span'),{className:'svg-icon',innerHTML:${fb}}))">`;
-    const play = e.kind === 'video' ? '<span class="play-badge"><svg viewBox="0 0 24 24" width="40%" height="40%"><path d="M8 5.5l11 6.5-11 6.5z" fill="#fff"/></svg></span>' : '';
-    return `<span class="thumb-wrap${e.kind === 'video' ? ' is-video' : ''}">${img}${play}</span>`;
-  }
-  const gs = state.gridSize;
-  // 文件夹比文件略大，强化「容器」存在感；按网格尺寸分三档
-  const sz = e.isDir
-    ? (gs === 'lg' ? 84 : gs === 'sm' ? 46 : 64)
-    : (gs === 'lg' ? 72 : gs === 'sm' ? 40 : 56);
-  return `<span class="svg-icon">${iconSvg(e, sz)}</span>`;
-}
-// 项目类型徽章：文件夹卡片上标 node/web/py… 一眼认出 AI 起的项目
-const PROJ_LABEL = { node: 'node', web: 'web', python: 'py', rust: 'rs', go: 'go', git: 'git' };
-function projBadge(e) {
-  if (!e.isDir || !e.project || !PROJ_LABEL[e.project]) return '';
-  return `<span class="proj-tag proj-${e.project}">${PROJ_LABEL[e.project]}</span>`;
-}
-function gridItem(e, i) {
-  const el = document.createElement('div');
-  const chg = state.changed && state.changed.get(e.name);
-  el.className = 'item' + (e.isDir ? ' is-dir' : ' is-file') + (e.hidden ? ' hidden-file' : '') + (state.selected === e.path ? ' selected' : '') + (chg ? ' changed' : '');
-  el.dataset.idx = i;
-  el.dataset.path = e.path;
-  if (chg) { el.dataset.changed = chg.count > 1 ? '改·' + chg.count : '改'; el.style.setProperty('--heat', Math.min(1, 0.4 + chg.count * 0.12).toFixed(2)); if (chg.files.size) el.title = '刚变更：\n' + [...chg.files].join('\n'); }
-  el.innerHTML = `<div class="icon" style="--tint:${iconColorFor(e)}">${thumbHtml(e)}${projBadge(e)}</div><div class="fname">${escapeHtml(e.name)}</div>${favBtn(e)}`;
-  bindItem(el, e);
-  return el;
-}
-function listRow(e, i) {
-  const el = document.createElement('div');
-  const chgR = state.changed && state.changed.get(e.name);
-  el.className = 'row' + (e.isDir ? ' is-dir' : ' is-file') + (e.hidden ? ' hidden-file' : '') + (state.selected === e.path ? ' selected' : '') + (chgR ? ' changed' : '');
-  el.dataset.idx = i;
-  el.dataset.path = e.path;
-  if (chgR) { el.dataset.changed = chgR.count > 1 ? '改·' + chgR.count : '改'; el.style.setProperty('--heat', Math.min(1, 0.4 + chgR.count * 0.12).toFixed(2)); if (chgR.files.size) el.title = '刚变更：\n' + [...chgR.files].join('\n'); }
-  el.innerHTML = `<div class="icon">${(e.kind === 'image' || e.kind === 'video') ? `<img class="thumb-sm" loading="lazy" decoding="async" src="/api/thumb?path=${encodeURIComponent(e.path)}&w=96&v=${e.mtime || 0}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'svg-icon',innerHTML:this.dataset.fb||''}))" data-fb='${escapeHtml(iconSvg(e, 18))}'>` : `<span class="svg-icon">${iconSvg(e, 18)}</span>`}</div>
-    <div class="fname">${escapeHtml(e.name)}${projBadge(e)}</div>
-    <div class="meta">${fmtTime(e.mtime)}</div>
-    <div class="meta">${e.isDir ? '' : fmtSize(e.size)}</div>
-    ${favBtn(e)}`;
-  bindItem(el, e);
-  return el;
-}
-function bindItem(el, e) {
-  // 拖拽到终端：把路径作为上下文喂给 coding agent
-  el.draggable = true;
-  el.addEventListener('dragstart', (ev) => {
-    ev.dataTransfer.setData('text/plain', e.path);
-    ev.dataTransfer.setData('application/x-codexbox-path', e.path);
-    // 拖图片进 md 编辑器：插入原文件路径引用。不带这条时浏览器默认抓的是卡片缩略图的
-    // /api/thumb?w=160 链接，低清且写进文档发出去就裂
-    if (e.kind === 'image') ev.dataTransfer.setData('text/html', `<img src="${escapeHtml(encodeURI(e.path))}" alt="${escapeHtml(e.name)}">`);
-    ev.dataTransfer.effectAllowed = 'copy';
+  fileList.render({
+    entries: list, view: state.view, gridSize: state.gridSize, selected: state.selected,
+    cursor: state.cursor, changed: state.changed, favorites: state.favorites.map((favorite) => favorite.path),
+  }, {
+    click: (entry, index) => { state.cursor = index; onItemClick(entry); },
+    open: (event, entry) => { if (!event.target.closest('.fav-btn')) onItemOpen(entry); },
+    menu: (event, entry, index) => { state.cursor = index; showContextMenu(event, entry); },
+    favorite: (entry) => toggleFav(entry),
+    drag: dragItem,
   });
-  el.onclick = (ev) => {
-    if (ev.target.closest('.fav-btn')) { ev.stopPropagation(); toggleFav(e); return; }
-    state.cursor = Number(el.dataset.idx);
-    onItemClick(e);
-  };
-  el.ondblclick = (ev) => { if (ev.target.closest('.fav-btn')) return; onItemOpen(e); };
-  el.oncontextmenu = (ev) => { state.cursor = Number(el.dataset.idx); showContextMenu(ev, e); };
+  state.cols = fileList.measureColumns();
+}
+function dragItem(event, entry) {
+  event.dataTransfer.setData('text/plain', entry.path);
+  event.dataTransfer.setData('application/x-codexbox-path', entry.path);
+  // 图片拖进 Markdown 时传原始路径，不能把缩略图 URL 写入文档。
+  if (entry.kind === 'image') event.dataTransfer.setData('text/html', `<img src="${escapeHtml(encodeURI(entry.path))}" alt="${escapeHtml(entry.name)}">`);
+  event.dataTransfer.effectAllowed = 'copy';
 }
 // 把系统拖入的文件（Finder 文件 / 截图浮窗缩略图）存进目标目录：
 // 有真实路径就复制进去，没路径（file-promise）就把字节直接写进去。仿终端那套口径。
@@ -268,11 +179,8 @@ function makeDraggablePath(el, p) {
 }
 // 只切换选中态的 class，绝不重建整个网格（重建会把所有缩略图重新解码 → 点击卡顿元凶）
 function applySelection(path) {
-  const area = $('#file-area');
-  const prev = area.querySelector('.item.selected, .row.selected');
-  if (prev) prev.classList.remove('selected');
   state.selected = path;
-  if (path) { const el = area.querySelector(`[data-path="${CSS.escape(path)}"]`); if (el) el.classList.add('selected'); }
+  fileList.setSelection(path);
 }
 function onItemClick(e) {
   if (follow.on) setFileFollow(false, '手动接管，文件跟随已停'); // 目录分支由 navigate 内统一处理，这里管点文件
@@ -294,10 +202,9 @@ function onItemOpen(e) {
 
 // ---------- 主区键盘导航 ----------
 function highlightCursor() {
-  const area = $('#file-area');
-  area.querySelectorAll('.cursor').forEach((x) => x.classList.remove('cursor'));
+  fileList.setCursor(state.cursor);
   if (state.cursor < 0) return;
-  const el = area.querySelector(`[data-idx="${state.cursor}"]`);
+  const el = $('#file-area').querySelector(`[data-idx="${state.cursor}"]`);
   if (el) { el.classList.add('cursor'); el.scrollIntoView({ block: 'nearest' }); }
 }
 function moveCursor(d) {

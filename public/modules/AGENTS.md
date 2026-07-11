@@ -6,7 +6,7 @@ command-palette.js: 全局命令面板控制器，提供文件名模糊搜索、
 edit-session.js: 编辑会话安全守卫，统一处理自动保存、未保存确认和状态清理
 editors.js: Monaco 与 Milkdown Crepe 编辑器适配工厂，集中处理加载、主题、语言和资源释放
 file-follow.js: Agent 文件跟随控制器，管理目标选择、实时代码/Markdown/HTML 渲染和变化反馈
-file-browser.js: 文件浏览控制器，管理目录导航、列表渲染、选择、拖放与键盘移动
+file-browser.js: 文件浏览控制器，管理目录导航、文件视图模型、选择、拖放与键盘移动，列表渲染委托 Svelte 服务
 file-actions.js: 文件动作控制器，管理文本编辑、文件变更和开发工具面板，输入、确认、上下文菜单、磁盘透视与发布向导复用 Svelte 服务
 icons.js: 文件类型与界面 SVG 图标工厂，提供富图标、通用图标和终端文件链接规则
 image-editor.js: Canvas 图片编辑控制器，提供标注、打码、缩放、格式转换和安全保存

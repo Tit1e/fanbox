@@ -8,7 +8,7 @@ import { Window } from 'happy-dom';
 import { readFile } from 'node:fs/promises';
 
 const GLOBAL_KEYS = [
-  'window', 'document', 'navigator', 'localStorage', 'location', 'Image', 'HTMLImageElement',
+  'window', 'document', 'navigator', 'localStorage', 'location', 'Image', 'HTMLImageElement', 'HTMLMediaElement',
   'Element', 'HTMLElement', 'Node', 'Text', 'Comment', 'DocumentFragment', 'Event', 'MouseEvent', 'CustomEvent',
   'CSS', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle',
 ];
@@ -25,6 +25,7 @@ export function installDom(body = '') {
     location: window.location,
     Image: window.Image,
     HTMLImageElement: window.HTMLImageElement,
+    HTMLMediaElement: window.HTMLMediaElement,
     Element: window.Element,
     HTMLElement: window.HTMLElement,
     Node: window.Node,

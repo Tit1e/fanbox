@@ -20,8 +20,8 @@ await esbuild.build({
   plugins: [sveltePlugin({ compilerOptions: { dev: false, css: 'injected', runes: true } })],
   legalComments: 'none',
   banner: { js: `/**
- * [INPUT]: 依赖 src-ui 的 Git、弹窗、菜单、磁盘、发布及侧边栏列表源码与打包内的 Svelte 运行时
- * [OUTPUT]: 对外提供 Git、弹窗、菜单、磁盘、发布与侧边栏列表服务的浏览器模块
+ * [INPUT]: 依赖 src-ui 的 Git、弹窗、菜单、磁盘、发布、侧边栏及主文件列表源码与 Svelte 运行时
+ * [OUTPUT]: 对外提供全部 Svelte 界面岛服务的浏览器模块
  * [POS]: public/generated 的 Svelte 界面构建产物，由 public/app.js 直接消费
  * [PROTOCOL]: 由 build/svelte-ui.mjs 生成，修改 src-ui 后重新构建并检查 AGENTS.md
  */` },
