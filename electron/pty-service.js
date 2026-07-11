@@ -1,0 +1,111 @@
+/**
+ * [INPUT]: 依赖 node-pty、Node.js 文件/进程能力与 ipc-validation.js 安全契约
+ * [OUTPUT]: 对外提供 createPtyService，统一管理终端创建、输入、尺寸、目录查询和销毁
+ * [POS]: electron 模块的终端领域服务，由 main.js 装配并被 IPC 处理器调用
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
+'use strict';
+
+const path = require('path');
+const os = require('os');
+const fs = require('fs');
+const { exec } = require('child_process');
+const { validPtyId, normalizeTerminalSize, validPtyInput, validDirectory } = require('./ipc-validation');
+
+function decodeLsofPath(value) {
+  if (!/\\x[0-9a-fA-F]{2}/.test(value)) return value;
+  const bytes = [];
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === '\\' && value[i + 1] === 'x' && /^[0-9a-fA-F]{2}$/.test(value.slice(i + 2, i + 4))) {
+      bytes.push(parseInt(value.slice(i + 2, i + 4), 16));
+      i += 3;
+    } else bytes.push(...Buffer.from(value[i], 'utf8'));
+  }
+  return Buffer.from(bytes).toString('utf8');
+}
+
+function termCwdByPid(pid, run = exec) {
+  return new Promise((resolve) => {
+    if (!pid) return resolve('');
+    run(`lsof -a -p ${pid} -d cwd -Fn`, { env: { ...process.env, LC_ALL: 'en_US.UTF-8' }, timeout: 3000 }, (err, stdout) => {
+      if (err) return resolve('');
+      const line = (stdout || '').split('\n').find((item) => item.startsWith('n'));
+      resolve(line ? decodeLsofPath(line.slice(1)) : '');
+    });
+  });
+}
+
+function createPtyService({ pty, send = () => {}, onCountChange = () => {} }) {
+  const terminals = new Map();
+  const notifyCount = () => onCountChange(terminals.size);
+
+  function spawn({ id, cwd, cols, rows }) {
+    if (!pty) return { ok: false, error: 'node-pty 未编译，跑：npm run rebuild' };
+    if (!validPtyId(id)) return { ok: false, error: '终端 ID 非法' };
+    if (terminals.has(id)) return { ok: false, error: '终端 ID 已存在' };
+    const shellPath = process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh');
+    const startCwd = validDirectory(cwd, fs) ? path.resolve(cwd) : os.homedir();
+    const size = normalizeTerminalSize(cols, rows);
+    const env = { ...process.env, TERM: 'xterm-256color', CODEXBOX: '1' };
+    delete env.CODEXBOX_PORT;
+    delete env.CODEXBOX_DEV_PORT;
+    delete env.CODEXBOX_NO_OPEN;
+    if (!/UTF-8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || '')) env.LANG = 'zh_CN.UTF-8';
+    let terminal;
+    try {
+      terminal = pty.spawn(shellPath, process.platform === 'win32' ? [] : ['-l'], {
+        name: 'xterm-256color', cols: size.cols, rows: size.rows, cwd: startCwd, env,
+      });
+    } catch (err) { return { ok: false, error: err.message }; }
+    terminals.set(id, terminal);
+    notifyCount();
+    terminal.onData((data) => send('pty:data', { id, data }));
+    terminal.onExit(({ exitCode }) => {
+      terminals.delete(id);
+      notifyCount();
+      send('pty:exit', { id, exitCode });
+    });
+    return { ok: true, cwd: startCwd };
+  }
+
+  function input({ id, data }) {
+    if (!validPtyId(id) || !validPtyInput(data)) return;
+    const terminal = terminals.get(id);
+    if (terminal) terminal.write(data);
+  }
+
+  function resize({ id, cols, rows }) {
+    if (!validPtyId(id)) return;
+    const terminal = terminals.get(id);
+    if (!terminal) return;
+    const size = normalizeTerminalSize(cols, rows);
+    try { terminal.resize(size.cols, size.rows); } catch { /* 终端可能刚退出 */ }
+  }
+
+  function kill({ id }) {
+    if (!validPtyId(id)) return;
+    const terminal = terminals.get(id);
+    if (!terminal) return;
+    try { terminal.kill(); } catch { /* 终端可能刚退出 */ }
+    terminals.delete(id);
+    notifyCount();
+  }
+
+  async function cwd({ id }) {
+    if (!validPtyId(id)) return { ok: false };
+    const terminal = terminals.get(id);
+    if (!terminal || !terminal.pid) return { ok: false };
+    const value = await termCwdByPid(terminal.pid);
+    return value ? { ok: true, cwd: value } : { ok: false };
+  }
+
+  function killAll() {
+    terminals.forEach((terminal) => { try { terminal.kill(); } catch { /* */ } });
+    terminals.clear();
+    notifyCount();
+  }
+
+  return { spawn, input, resize, kill, cwd, killAll, count: () => terminals.size };
+}
+
+module.exports = { createPtyService, decodeLsofPath, termCwdByPid };

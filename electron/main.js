@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 Electron 的窗口/菜单/IPC/系统能力、ipc-validation.js 安全契约、../server.js 本地服务、../port-config.js 端口配置和 node-pty 终端
+ * [INPUT]: 依赖 Electron 窗口/菜单/IPC 能力、各领域服务、../server.js 本地服务与 ../port-config.js 端口配置
  * [OUTPUT]: 对外提供 CodexBox 桌面主进程、PTY 与文件/剪贴板/更新 IPC、原生菜单和窗口生命周期
  * [POS]: electron 模块的主进程编排器，与 preload.js 协作连接渲染层、本地服务和操作系统
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -11,9 +11,11 @@ const os = require('os');
 const fs = require('fs');
 const { resolvePort } = require('../port-config');
 const {
-  validPtyId, normalizeTerminalSize, validPtyInput, validDirectory, normalizeWatchDirs,
-  safeDropName, safeBuffer, validVersion, validGithubUrl,
+  validVersion, validGithubUrl,
 } = require('./ipc-validation');
+const { createPtyService } = require('./pty-service');
+const { createFileWatchService } = require('./file-watch-service');
+const { createSystemFileService } = require('./system-file-service');
 
 const APP_NAME = 'CodexBox';
 app.setName(APP_NAME);
@@ -31,8 +33,14 @@ let pty = null;
 try { pty = require('node-pty'); }
 catch (e) { console.error('[codexbox] node-pty 未就绪（跑 npm run rebuild）：', e.message); }
 
-const terminals = new Map();
 let win = null;
+const send = (channel, payload) => {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+};
+let terminalCount = 0;
+const ptyService = createPtyService({ pty, send, onCountChange: (count) => { terminalCount = count; refreshLidGuard(); } });
+const watchService = createFileWatchService({ send });
+const systemFileService = createSystemFileService({ app, nativeImage, clipboard });
 
 // ---------- 窗口尺寸/位置记忆 ----------
 const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
@@ -346,7 +354,7 @@ function installSudoers() {
 // 按「用户意图 × 终端存活」结算系统状态，终端起落和开关变化都调用，保持幂等。
 function refreshLidGuard() {
   if (process.platform !== 'darwin') return;
-  const want = lidIntent && terminals.size > 0;
+  const want = lidIntent && terminalCount > 0;
   if (want === lidActive) return;
   const ok = trySetDisableSleep(want);
   if (want && !ok) { // 免密规则丢了，退回关闭，别让用户以为还护着
@@ -430,7 +438,7 @@ app.on('activate', () => {
 let isQuitting = false; // 真正退出（⌘Q / 菜单退出）才置真；点红叉只隐藏不退出，见 win.on('close')
 let quitPrompting = false;
 app.on('before-quit', (e) => {
-  if (isQuitting || terminals.size === 0) { isQuitting = true; return; }
+  if (isQuitting || terminalCount === 0) { isQuitting = true; return; }
   e.preventDefault();
   if (quitPrompting) return;
   quitPrompting = true;
@@ -439,7 +447,7 @@ app.on('before-quit', (e) => {
     buttons: [M('取消', 'Cancel'), M('退出', 'Quit')],
     defaultId: 0,
     cancelId: 0,
-    message: M(`还有 ${terminals.size} 个终端会话在运行`, `${terminals.size} terminal session(s) still running`),
+    message: M(`还有 ${terminalCount} 个终端会话在运行`, `${terminalCount} terminal session(s) still running`),
     detail: M('退出会终止正在运行的 agent 任务，确定退出？', 'Quitting will terminate running agent tasks. Quit anyway?'),
   }).then(({ response }) => {
     quitPrompting = false;
@@ -452,188 +460,24 @@ app.on('before-quit', (e) => {
   });
 });
 app.on('window-all-closed', () => {
-  terminals.forEach((p) => { try { p.kill(); } catch { /* */ } });
-  terminals.clear();
+  ptyService.killAll();
+  watchService.closeAll();
   if (lidActive) { trySetDisableSleep(false); lidActive = false; } // 终端没了，别让 Mac 一直不睡
   if (process.platform !== 'darwin') app.quit();
 });
 // 退出兜底：无论怎么退（⌘Q、崩溃前的正常退出），都恢复系统休眠，绝不留禁休眠的烂摊子
 app.on('will-quit', () => { if (process.platform === 'darwin') trySetDisableSleep(false); });
 
-// ---------- 终端 IPC（node-pty）----------
-ipcMain.handle('pty:spawn', (e, { id, cwd, cols, rows }) => {
-  if (!pty) return { ok: false, error: 'node-pty 未编译，跑：npm run rebuild' };
-  if (!validPtyId(id)) return { ok: false, error: '终端 ID 非法' };
-  if (terminals.has(id)) return { ok: false, error: '终端 ID 已存在' };
-  const shellPath = process.env.SHELL || (process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh');
-  const startCwd = validDirectory(cwd, fs) ? path.resolve(cwd) : os.homedir();
-  const size = normalizeTerminalSize(cols, rows);
-  // login shell（-l）：GUI 启动的进程只继承精简 PATH，不读 .zprofile/.zlogin，
-  // 用户在那里配的 Homebrew/nvm/npm 全局路径（codex 等）就丢了 → 「普通终端能找到、codexbox 找不到」。
-  // 走 login shell 把这些路径带进来。Windows 的 powershell 无此机制，保持空参数。
-  const shellArgs = process.platform === 'win32' ? [] : ['-l'];
-  // GUI 启动的 app 不继承 shell 的 locale，zsh 会把中文路径按字节转义成 \M-^@ 乱码 → 兜底 UTF-8。
-  // 端口覆盖和禁止开浏览器只用于主进程复用本地服务，不能泄漏进用户终端。
-  // login shell 自己配置的同名变量仍可正常生效。
-  const env = { ...process.env, TERM: 'xterm-256color', CODEXBOX: '1' };
-  delete env.CODEXBOX_PORT;
-  delete env.CODEXBOX_DEV_PORT;
-  delete env.CODEXBOX_NO_OPEN;
-  if (!/UTF-8/i.test(env.LC_ALL || env.LC_CTYPE || env.LANG || '')) env.LANG = 'zh_CN.UTF-8';
-  let p;
-  try {
-    p = pty.spawn(shellPath, shellArgs, {
-      name: 'xterm-256color',
-      cols: size.cols,
-      rows: size.rows,
-      cwd: startCwd,
-      env,
-    });
-  } catch (err) { return { ok: false, error: err.message }; }
-  terminals.set(id, p);
-  refreshLidGuard(); // 开关开着时，第一个终端起来即生效
-  p.onData((data) => {
-    if (win && !win.isDestroyed()) win.webContents.send('pty:data', { id, data });
-  });
-  p.onExit(({ exitCode }) => {
-    terminals.delete(id);
-    refreshLidGuard(); // 最后一个终端退出即恢复休眠
-    if (win && !win.isDestroyed()) win.webContents.send('pty:exit', { id, exitCode });
-  });
-  return { ok: true, cwd: startCwd };
-});
-// ---------- 剪贴板：复制图片本体 / 复制文件（访达可粘贴）----------
-ipcMain.handle('clip:image', (e, { path: p }) => {
-  try { const img = nativeImage.createFromPath(p); if (img.isEmpty()) return { ok: false, error: '不是可读图片' }; clipboard.writeImage(img); return { ok: true }; }
-  catch (err) { return { ok: false, error: err.message }; }
-});
-ipcMain.handle('clip:file', (e, { path: p }) => new Promise((resolve) => {
-  const { execFile } = require('child_process');
-  // argv 传路径，避免拼进 AppleScript 字面量被注入
-  execFile('osascript', ['-e', 'on run argv', '-e', 'set the clipboard to (POSIX file (item 1 of argv))', '-e', 'end run', p], (err) => resolve({ ok: !err, error: err && err.message }));
-}));
-
-// 拖拽落盘：file-promise 类拖入（截图浮窗等）没有真实路径，把字节写进临时目录换路径
-ipcMain.handle('drop:save', (e, { name, buf }) => {
-  try {
-    const dir = path.join(app.getPath('temp'), 'codexbox-drops');
-    fs.mkdirSync(dir, { recursive: true });
-    const safe = safeDropName(name, '拖入文件.png');
-    const bytes = safeBuffer(buf);
-    if (!bytes) return { ok: false, error: '拖入内容无效或过大' };
-    let dest = path.join(dir, safe);
-    if (fs.existsSync(dest)) dest = path.join(dir, `${Date.now()}-${safe}`);
-    fs.writeFileSync(dest, bytes);
-    return { ok: true, path: dest };
-  } catch (err) { return { ok: false, error: err.message }; }
-});
-// 同名不覆盖：foo.png 已存在就退而求其次 foo 2.png（仿访达）
-function uniqueDest(dest) {
-  if (!fs.existsSync(dest)) return dest;
-  const d = path.dirname(dest), ext = path.extname(dest), base = path.basename(dest, ext);
-  for (let i = 2; i < 1000; i++) { const c = path.join(d, `${base} ${i}${ext}`); if (!fs.existsSync(c)) return c; }
-  return path.join(d, `${Date.now()}-${base}${ext}`);
-}
-// 拖进文件区：把没路径的拖入内容（截图浮窗等）写进目标目录
-ipcMain.handle('drop:save-into', (e, { dir, name, buf }) => {
-  try {
-    if (!validDirectory(dir, fs)) return { ok: false, error: '目标目录无效' };
-    const safe = safeDropName(name, '拖入文件');
-    const bytes = safeBuffer(buf);
-    if (!bytes) return { ok: false, error: '拖入内容无效或过大' };
-    const dest = uniqueDest(path.join(dir, safe));
-    fs.writeFileSync(dest, bytes);
-    return { ok: true, path: dest };
-  } catch (err) { return { ok: false, error: err.message }; }
-});
-// 拖进文件区：把已有路径的文件（Finder 文件）复制进目标目录
-ipcMain.handle('drop:copy-into', (e, { srcPath, dir }) => {
-  try {
-    if (!srcPath || !fs.existsSync(srcPath)) return { ok: false, error: '源文件不存在' };
-    if (!validDirectory(dir, fs)) return { ok: false, error: '目标目录无效' };
-    const dest = uniqueDest(path.join(dir, path.basename(srcPath)));
-    if (path.resolve(srcPath) === path.resolve(dest)) return { ok: true, path: dest }; // 原地拖入，无需复制
-    fs.copyFileSync(srcPath, dest);
-    return { ok: true, path: dest };
-  } catch (err) { return { ok: false, error: err.message }; }
-});
-
-ipcMain.on('pty:input', (e, { id, data }) => { if (!validPtyId(id) || !validPtyInput(data)) return; const p = terminals.get(id); if (p) p.write(data); });
-ipcMain.on('pty:resize', (e, { id, cols, rows }) => { if (!validPtyId(id)) return; const p = terminals.get(id); if (p) { const size = normalizeTerminalSize(cols, rows); try { p.resize(size.cols, size.rows); } catch { /* */ } } });
-ipcMain.on('pty:kill', (e, { id }) => { if (!validPtyId(id)) return; const p = terminals.get(id); if (p) { try { p.kill(); } catch { /* */ } terminals.delete(id); refreshLidGuard(); } });
-
-// lsof 在非 UTF-8 locale 下会把中文路径按字节转义成 \xe8 字面量（GUI 启动的 app 不继承 shell 的 locale，
-// 正中这个坑：标签标题乱码、双击定位失效）。调 lsof 时显式给 UTF-8 locale，这里再留一层 \xNN 解码兜底
-function decodeLsofPath(s) {
-  if (!/\\x[0-9a-fA-F]{2}/.test(s)) return s;
-  const bytes = [];
-  for (let i = 0; i < s.length; i++) {
-    if (s[i] === '\\' && s[i + 1] === 'x' && /^[0-9a-fA-F]{2}$/.test(s.slice(i + 2, i + 4))) {
-      bytes.push(parseInt(s.slice(i + 2, i + 4), 16));
-      i += 3;
-    } else {
-      for (const b of Buffer.from(s[i], 'utf8')) bytes.push(b);
-    }
-  }
-  return Buffer.from(bytes).toString('utf8');
-}
-// 取某终端 shell 的真实当前目录（用 lsof 查 pty 子进程的 cwd）
-function termCwdByPid(pid) {
-  return new Promise((resolve) => {
-    if (!pid) return resolve('');
-    require('child_process').exec(`lsof -a -p ${pid} -d cwd -Fn`, { env: { ...process.env, LC_ALL: 'en_US.UTF-8' }, timeout: 3000 }, (err, stdout) => {
-      if (err) return resolve('');
-      const line = (stdout || '').split('\n').find((l) => l.startsWith('n'));
-      resolve(line ? decodeLsofPath(line.slice(1)) : '');
-    });
-  });
-}
-// 取某终端 shell 的真实当前目录，实现「定位到终端目录」
-ipcMain.handle('pty:cwd', async (e, { id }) => {
-  if (!validPtyId(id)) return { ok: false };
-  const p = terminals.get(id);
-  if (!p || !p.pid) return { ok: false };
-  const cwd = await termCwdByPid(p.pid);
-  return cwd ? { ok: true, cwd } : { ok: false };
-});
-
-// ---------- 文件监听（agent 改文件 → 自动刷新 + 跨项目变更收件箱）----------
-// 多目录监听：浏览目录 + 每个终端会话所在的项目目录。一下午开多个项目跑 agent 时，
-// 不在前台的项目也能感知变更。前端发来期望监听集，这里做增量 diff（关掉多余、补上新增）。
-const watchers = new Map(); // dir -> FSWatcher
-function startWatch(dir) {
-  if (watchers.has(dir) || !dir || !fs.existsSync(dir)) return;
-  try {
-    // macOS(FSEvents)/Windows 原生递归；Linux 递归不可靠，降级为非递归监听当前目录
-    const recursive = process.platform !== 'linux';
-    const w = fs.watch(dir, { persistent: false, recursive }, (evt, filename) => {
-      if (!win || win.isDestroyed()) return;
-      const name = filename ? filename.toString() : null;
-      // FSEvents 连「文件只是被读了一下」（atime/元数据更新）都报：agent cat/Read 个文件、
-      // Spotlight 扫一遍都会触发。mtime/ctime 都不新鲜 = 内容根本没动过，丢弃；
-      // stat 失败 = 刚被删，是真变更，照常转发
-      if (name) {
-        try {
-          const st = fs.statSync(path.join(dir, name));
-          const now = Date.now();
-          if (now - st.mtimeMs > 3000 && now - st.ctimeMs > 3000) return;
-        } catch { /* 已删除/无权限：当真变更转发 */ }
-      }
-      win.webContents.send('fs:changed', { dir, filename: name });
-    });
-    watchers.set(dir, w);
-  } catch { /* 无权限等，跳过该目录 */ }
-}
-ipcMain.handle('fs:watch-set', (e, { dirs }) => {
-  const want = new Set(normalizeWatchDirs(dirs, fs));
-  for (const [dir, w] of watchers) { if (!want.has(dir)) { try { w.close(); } catch { /* */ } watchers.delete(dir); } }
-  for (const dir of want) startWatch(dir);
-  return { ok: true, count: watchers.size };
-});
-// 兼容旧单目录接口：等价于「只监听这一个目录」
-ipcMain.handle('fs:watch', (e, { dir }) => {
-  if (!validDirectory(dir, fs)) return { ok: false, error: '监听目录无效' };
-  for (const [d, w] of watchers) { if (d !== dir) { try { w.close(); } catch { /* */ } watchers.delete(d); } }
-  startWatch(dir);
-  return { ok: true };
-});
+// ---------- 领域服务 IPC ----------
+ipcMain.handle('pty:spawn', (event, payload) => ptyService.spawn(payload));
+ipcMain.on('pty:input', (event, payload) => ptyService.input(payload));
+ipcMain.on('pty:resize', (event, payload) => ptyService.resize(payload));
+ipcMain.on('pty:kill', (event, payload) => ptyService.kill(payload));
+ipcMain.handle('pty:cwd', (event, payload) => ptyService.cwd(payload));
+ipcMain.handle('clip:image', (event, payload) => systemFileService.copyImage(payload));
+ipcMain.handle('clip:file', (event, payload) => systemFileService.copyFile(payload));
+ipcMain.handle('drop:save', (event, payload) => systemFileService.save(payload));
+ipcMain.handle('drop:save-into', (event, payload) => systemFileService.saveInto(payload));
+ipcMain.handle('drop:copy-into', (event, payload) => systemFileService.copyInto(payload));
+ipcMain.handle('fs:watch-set', (event, payload) => watchService.set(payload));
+ipcMain.handle('fs:watch', (event, payload) => watchService.watch(payload));
