@@ -1,5 +1,5 @@
 # CodexBox - Codex 的本地桌面驾驶舱
-Electron 33.4.11 + Node.js >=18 + xterm.js 6.0.0 + node-pty 1.1.0 + 原生 HTML/CSS/JavaScript
+Electron 33.4.11 + Node.js >=22 + xterm.js 6.0.0 + node-pty 1.1.0 + 原生 HTML/CSS/JavaScript
 
 <directory>
 assets/ - README 与宣传页使用的产品截图和横幅
@@ -10,7 +10,7 @@ experiments/ - 可独立执行的回归验证与技术实验
 public/ - 浏览器渲染层、样式和本地 vendor 资源
 server/ - 本地服务领域模块，承载配置、路径和 Codex 会话能力
 src-vendor/ - vendor 浏览器包的 esbuild 源入口
-tests/ - Node 内置自动化测试，覆盖服务端高风险逻辑
+tests/ - Node 内置自动化测试，覆盖服务端高风险逻辑与渲染层控制器行为
 </directory>
 
 <config>

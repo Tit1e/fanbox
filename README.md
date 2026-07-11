@@ -288,7 +288,7 @@ codexbox/
 ├── build/                  # 图标 + entitlements / Icons + entitlements
 ├── docs/                   # 概念/PRD/路线图/验收标准
 │                           # Concepts/PRD/roadmap/acceptance criteria
-├── tests/                  # Node 服务单元测试 / Node service unit tests
+├── tests/                  # 服务端与渲染控制器测试 / Server and renderer controller tests
 └── experiments/            # 实验脚本（含 README 截图脚本）
                             # Experiment scripts (incl. README screenshot script)
 ```
