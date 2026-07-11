@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 happy-dom 与 public/generated/git-panel.mjs Svelte 构建产物
+ * [INPUT]: 依赖 happy-dom 与 public/generated/ui.mjs Svelte 构建产物
  * [OUTPUT]: 验证仓库汇总、非仓库提示、变更文件列表和 Diff 跳转
  * [POS]: tests/frontend 的 Git 状态栏与弹层交互回归测试
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -11,7 +11,7 @@ import { installDom } from './dom-environment.mjs';
 const previewCss = await readFile(new URL('../../public/styles/preview.css', import.meta.url), 'utf8');
 
 async function setup(api, calls = []) {
-  const moduleUrl = new URL(`../../public/generated/git-panel.mjs?test=${Date.now()}-${Math.random()}`, import.meta.url);
+  const moduleUrl = new URL(`../../public/generated/ui.mjs?test=${Date.now()}-${Math.random()}`, import.meta.url);
   const { createGitPanel } = await import(moduleUrl);
   return createGitPanel({
     $: (selector) => document.querySelector(selector),

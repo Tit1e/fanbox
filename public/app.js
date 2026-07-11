@@ -1,5 +1,5 @@
 /**
- * [INPUT]: 依赖 index.html DOM、i18n.js、服务端 HTTP/Git API、xterm/Monaco/Milkdown 浏览器全局对象和 Electron preload 桥接
+ * [INPUT]: 依赖 index.html DOM、generated/ui.mjs Svelte 界面岛、i18n.js、服务端 HTTP/Git API、xterm/Monaco/Milkdown 浏览器全局对象和 Electron preload 桥接
  * [OUTPUT]: 对外提供 CodexBox 文件管理、Git 变更查看、预览编辑、内嵌终端、Codex 项目会话操作、文件跟随和全局交互
  * [POS]: public 模块的渲染层主入口，集中编排页面状态、视图和桌面能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -20,7 +20,7 @@ import { createUiController } from './modules/ui-controller.js';
 import { startApplication } from './modules/lifecycle.js';
 import { createEffects } from './modules/effects.js';
 import { guardEditExit } from './modules/edit-session.js';
-import { createGitPanel } from './generated/git-panel.mjs';
+import { createDialogService, createGitPanel } from './generated/ui.mjs';
 
 const $ = (s) => document.querySelector(s);
 const api = (p) => fetch(p).then((r) => r.json());
@@ -143,6 +143,7 @@ let undoImage;
 
 let setFileFollow, rememberFollowChange, followChange;
 const { isNoisyChange, kindFromName, rippleFileArea, playChime } = createEffects(state, $);
+const dialogService = createDialogService();
 
 
 function setupControllers() {
@@ -159,6 +160,8 @@ function setupControllers() {
     diskPanel, closeContextMenu, showContextMenu, popupMenu, shotTray,
   } = createFileActionsController({
     $, state, api, apiPost, toast,
+    inputDialog: dialogService.inputDialog,
+    confirmDialog: dialogService.confirmDialog,
     loadFavorites: (...args) => loadFavorites(...args),
     renderFavs: (...args) => renderFavs(...args),
     renderFiles: (...args) => renderFiles(...args),

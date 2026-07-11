@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 依赖文件 API、共享编辑运行态、终端代理以及导航和预览动作代理
+ * [INPUT]: 依赖文件 API、Svelte 通用弹窗、共享编辑运行态、终端代理以及导航和预览动作代理
  * [OUTPUT]: 对外提供 createFileActionsController，管理编辑、文件操作、工具面板和上下文菜单
  * [POS]: public/modules 的文件动作领域控制器，被预览、文件列表、侧边栏和事件层消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createFileActionsController(deps) {
-  const { $, state, api, apiPost, toast, loadFavorites, renderFavs, renderFiles, navigate, openPreview, setFileFollow, follow, term, mona, crepe, runtime, guardDirty, dirOf, fmtSize, escapeHtml, ic, svgWrap, SVG, showPreviewPanel, renderPreviewFoot, renderPreviewActions, isFav, renderBreadcrumb, renderTextPreview, isMdName, closePreview, lightbox, enterImageEdit, refreshGitStatus } = deps;
+  const { $, state, api, apiPost, toast, inputDialog, confirmDialog, loadFavorites, renderFavs, renderFiles, navigate, openPreview, setFileFollow, follow, term, mona, crepe, runtime, guardDirty, dirOf, fmtSize, escapeHtml, ic, svgWrap, SVG, showPreviewPanel, renderPreviewFoot, renderPreviewActions, isFav, renderBreadcrumb, renderTextPreview, isMdName, closePreview, lightbox, enterImageEdit, refreshGitStatus } = deps;
 // ---------- 操作 ----------
 // macOS 打开文件时 LaunchServices 会写 com.apple.lastuseddate#PS 扩展属性，FSEvents 据此连发事件——
 // 内容没动却会点亮「改」徽标。自己发起的打开记下路径，3 秒内该文件的变更事件按噪声丢弃
@@ -344,45 +344,6 @@ async function doCreate(type) {
   await refresh();
   // 新建文件顺手打开编辑
   if (type === 'file') { const ne = state.entries.find((x) => x.path === r.path); if (ne && ne.kind === 'text') enterEditMode(ne); }
-}
-// 通用输入弹窗（替代原生 prompt，配合皮肤）
-function inputDialog(title, value = '', placeholder = '') {
-  return new Promise((resolve) => {
-    const ov = document.createElement('div');
-    ov.className = 'input-overlay';
-    ov.innerHTML = `<div class="input-dialog"><div class="input-title">${escapeHtml(title)}</div>
-      <input class="input-field" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}" spellcheck="false">
-      <div class="input-actions"><button class="ghost-btn" data-act="cancel">取消</button><button class="primary" data-act="ok">确定</button></div></div>`;
-    document.body.appendChild(ov);
-    const inp = ov.querySelector('.input-field');
-    inp.focus();
-    inp.select();
-    const done = (v) => { ov.remove(); resolve(v); };
-    ov.querySelector('[data-act=ok]').onclick = () => done(inp.value.trim());
-    ov.querySelector('[data-act=cancel]').onclick = () => done(null);
-    ov.onclick = (ev) => { if (ev.target === ov) done(null); };
-    inp.addEventListener('keydown', (ev) => {
-      ev.stopPropagation();
-      if (ev.key === 'Enter') { ev.preventDefault(); done(inp.value.trim()); }
-      else if (ev.key === 'Escape') { ev.preventDefault(); done(null); }
-    });
-  });
-}
-// 是/否确认弹窗
-function confirmDialog(msg) {
-  return new Promise((resolve) => {
-    const ov = document.createElement('div');
-    ov.className = 'input-overlay';
-    ov.innerHTML = `<div class="input-dialog"><div class="input-title">${escapeHtml(msg)}</div><div class="input-actions"><button class="ghost-btn" data-act="no">取消</button><button class="primary" data-act="yes">确定</button></div></div>`;
-    document.body.appendChild(ov);
-    const done = (v) => { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
-    function onKey(ev) { if (ev.key === 'Escape') { ev.preventDefault(); done(false); } else if (ev.key === 'Enter') { ev.preventDefault(); done(true); } }
-    ov.querySelector('[data-act=yes]').onclick = () => done(true);
-    ov.querySelector('[data-act=no]').onclick = () => done(false);
-    ov.onclick = (ev) => { if (ev.target === ov) done(false); };
-    document.addEventListener('keydown', onKey, true);
-    ov.querySelector('[data-act=yes]').focus();
-  });
 }
 // ---------- 截图直通车：系统截屏落盘 → 右下角浮出直通卡，终端/素材/标注一步到位 ----------
 const shotTray = {

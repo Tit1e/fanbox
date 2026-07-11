@@ -42,7 +42,7 @@ test('所有渲染层控制器工厂可独立装配并保持公开接口', async
   const dom = installDom();
   try {
     const deps = dependencyBag();
-    const { createGitPanel } = await import(new URL(`../../public/generated/git-panel.mjs?contract=${Date.now()}`, import.meta.url));
+    const { createGitPanel } = await import(new URL(`../../public/generated/ui.mjs?contract=${Date.now()}`, import.meta.url));
     const icons = createIcons(deps.state);
     assert.equal(typeof icons.iconSvg, 'function');
     assert.equal(typeof createEditors(deps.state).mona.load, 'function');
