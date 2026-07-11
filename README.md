@@ -257,7 +257,7 @@ Every frontend dependency is vendored locally (`public/vendor/`) — that's what
 
 | 层 / Layer | 用什么 / Stack |
 |---|---|
-| 后端 / Backend | 零依赖 Node.js `server.js`（文件 API + 静态服务 + 缩略图）<br>Zero-dependency Node.js `server.js` (file APIs + static serving + thumbnails) |
+| 后端 / Backend | 零依赖 Node.js `server.js` 入口 + `server/` 领域服务<br>Zero-dependency Node.js entry + domain services |
 | 桌面壳 / Desktop shell | Electron 33 + node-pty（asarUnpack 原生模块）<br>Electron 33 + node-pty (asarUnpack native module) |
 | 终端 / Terminal | xterm.js + WebGL + unicode11 |
 | 编辑器 / Editors | Monaco（代码）+ Milkdown Crepe（Markdown）<br>Monaco (code) + Milkdown Crepe (Markdown) |
@@ -268,8 +268,9 @@ Every frontend dependency is vendored locally (`public/vendor/`) — that's what
 
 ```
 codexbox/
-├── server.js               # 零依赖 Node 后端（文件 API + 缩略图 + 静态服务）
-│                           # Zero-dependency Node backend (file APIs + thumbnails + static)
+├── server.js               # 零依赖 Node 后端装配入口 / Backend composition root
+├── server/                 # HTTP、文件、媒体、配置和 Codex 会话领域服务
+│                           # HTTP, file, media, config and Codex session services
 ├── electron/
 │   ├── main.js             # 主进程（窗口/pty/剪贴板/fs.watch/菜单）
 │   │                       # Main process (window/pty/clipboard/fs.watch/menu)
@@ -277,8 +278,9 @@ codexbox/
 │                           # Exposes codexboxPty / codexboxFs / codexboxClipboard
 ├── public/
 │   ├── index.html
-│   ├── style.css
-│   ├── app.js              # 前端单页应用 / Frontend single-page app
+│   ├── app.js              # 原生 ES Module 装配入口 / Native ESM composition root
+│   ├── modules/            # 文件、预览、终端和跟随控制器 / Domain controllers
+│   ├── styles/             # 按级联顺序拆分的样式 / Ordered style modules
 │   └── vendor/             # xterm / monaco / milkdown 本地资源
 │                           # xterm / monaco / milkdown local assets
 ├── src-vendor/             # esbuild 入口，产出 public/vendor/milkdown
@@ -286,6 +288,7 @@ codexbox/
 ├── build/                  # 图标 + entitlements / Icons + entitlements
 ├── docs/                   # 概念/PRD/路线图/验收标准
 │                           # Concepts/PRD/roadmap/acceptance criteria
+├── tests/                  # Node 服务单元测试 / Node service unit tests
 └── experiments/            # 实验脚本（含 README 截图脚本）
                             # Experiment scripts (incl. README screenshot script)
 ```

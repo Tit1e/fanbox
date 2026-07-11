@@ -1,0 +1,171 @@
+/**
+ * [INPUT]: 依赖 DOM/API 基础能力、共享 state、导航与通用弹层回调
+ * [OUTPUT]: 对外提供 createSidebarController，管理根目录、收藏和 Codex 项目列表
+ * [POS]: public/modules 的侧边栏领域控制器，被应用入口初始化和导航流程消费
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
+export function createSidebarController(deps) {
+  const { $, api, apiPost, state, svgWrap, SVG, escapeHtml, dirOf, navigate, makeDraggablePath, openPreview, renderFiles, toggleFav, toast, confirmDialog, popupMenu } = deps;
+// ---------- 侧边栏 ----------
+// 侧栏目录树：目录项带展开箭头，点箭头逐级懒加载子目录（只列文件夹），点行本身仍是跳转
+function navDirLi(name, p) {
+  const li = document.createElement('li');
+  li.dataset.path = p;
+  const twirl = document.createElement('span');
+  twirl.className = 'twirl';
+  twirl.textContent = '▸';
+  twirl.title = '展开子文件夹';
+  twirl.onclick = (ev) => { ev.stopPropagation(); toggleNavSub(li, p, twirl); };
+  const ico = document.createElement('span');
+  ico.className = 'ico';
+  ico.innerHTML = svgWrap(SVG.folder, 'currentColor', 16, true);
+  const label = document.createElement('span');
+  label.className = 'label';
+  label.textContent = name;
+  label.title = p;
+  li.append(twirl, ico, label);
+  li.onclick = () => navigate(p);
+  makeDraggablePath(li, p);
+  return li;
+}
+async function toggleNavSub(li, dirPath, twirl) {
+  const old = li.nextElementSibling;
+  if (old && old.classList.contains('nav-sub')) { old.remove(); twirl.textContent = '▸'; return; }
+  twirl.textContent = '▾';
+  const ul = document.createElement('ul');
+  ul.className = 'nav-list nav-sub';
+  li.after(ul);
+  try {
+    const data = await api('/api/list?path=' + encodeURIComponent(dirPath));
+    const dirs = (data.entries || []).filter((e) => e.isDir && !e.hidden);
+    if (!dirs.length) { ul.innerHTML = '<div class="nav-empty">没有子文件夹</div>'; return; }
+    dirs.forEach((e) => ul.appendChild(navDirLi(e.name, e.path)));
+  } catch { ul.remove(); twirl.textContent = '▸'; }
+}
+async function loadRoots() {
+  const data = await api('/api/roots');
+  state.home = data.home;
+  state.platform = data.platform;
+  state.sep = data.sep || '/';
+  const ul = $('#roots-list');
+  ul.innerHTML = '';
+  data.roots.forEach((r) => ul.appendChild(navDirLi(r.name, r.path)));
+}
+function renderRootsActive() {
+  // 快速入口 / 收藏 / Codex 项目三个列表统一高亮「当前所在目录」，让用户清楚自己点开/身处哪一项
+  ['#roots-list', '#favs-list', '#codex-projects-list'].forEach((sel) => {
+    const ul = $(sel); if (!ul) return;
+    ul.querySelectorAll('li').forEach((li) => li.classList.toggle('active', li.dataset.path === state.cwd));
+  });
+}
+async function loadFavorites() {
+  const data = await api('/api/favorites');
+  state.favorites = data.favorites || [];
+  state.recentOpened = data.recentOpened || [];
+  renderFavs();
+}
+function renderFavs() {
+  const ul = $('#favs-list');
+  ul.innerHTML = '';
+  if (!state.favorites.length) { ul.innerHTML = '<div class="nav-empty">悬停文件点 ☆ 即可收藏</div>'; return; }
+  state.favorites.forEach((f) => {
+    let li;
+    if (f.isDir) {
+      li = navDirLi(f.name, f.path);
+    } else {
+      li = document.createElement('li');
+      li.innerHTML = `<span class="ico">${svgWrap(SVG.file, 'currentColor', 16)}</span><span class="label" title="${escapeHtml(f.path)}">${escapeHtml(f.name)}</span>`;
+      li.onclick = () => navigate(dirOf(f.path)).then(() => { const e = state.entries.find((x) => x.path === f.path); if (e) { state.selected = f.path; openPreview(e); renderFiles(); } });
+      makeDraggablePath(li, f.path);
+    }
+    const un = document.createElement('span');
+    un.className = 'unfav';
+    un.title = '移除';
+    un.textContent = '✕';
+    un.onclick = (ev) => { ev.stopPropagation(); toggleFav(f); };
+    li.appendChild(un);
+    ul.appendChild(li);
+  });
+  renderRootsActive(); // 重渲后补一次高亮，让「当前所在的收藏」保持选中态
+}
+// Codex 项目：从本机 Codex 会话日志发现最近处理过的项目文件夹
+function agoShort(ms) {
+  const m = Math.round((Date.now() - ms) / 60000);
+  if (m < 2) return '刚刚';
+  if (m < 60) return m + ' 分';
+  if (m < 1440) return Math.round(m / 60) + ' 时';
+  return Math.round(m / 1440) + ' 天';
+}
+function refreshCodexProjectTimes(list) {
+  const items = $('#codex-projects-list').querySelectorAll('li');
+  list.forEach((pj, i) => {
+    const li = items[i];
+    if (!li) return;
+    const ago = agoShort(pj.lastActive);
+    const label = li.querySelector('.label');
+    const when = li.querySelector('.when');
+    if (label) label.title = `${pj.path}\nCodex · ${ago}前活跃`;
+    if (when) when.textContent = ago;
+  });
+}
+const codexProjectActions = new Set();
+async function runCodexProjectAction(pj, action) {
+  if (codexProjectActions.has(pj.path)) return;
+  codexProjectActions.add(pj.path);
+  try {
+    const info = await apiPost('/api/codex-projects/inspect', { path: pj.path, action });
+    if (!info.ok) { toast(info.error || '读取 Codex 会话失败', true); return; }
+    if (!info.total) { toast('没有找到可处理的 Codex 会话', true); return; }
+    if (info.running) { toast(`有 ${info.running} 条会话正在运行，请先结束后再操作`, true); return; }
+    const verb = action === 'archive' ? '归档' : '永久删除';
+    const suffix = action === 'archive' ? '之后可在 Codex 中恢复。' : '此操作不可恢复。';
+    if (!await confirmDialog(`${verb}「${pj.name}」的 ${info.total} 条会话？${suffix}`)) return;
+    toast(action === 'archive' ? '正在归档…' : '正在删除…');
+    const result = await apiPost(`/api/codex-projects/${action}`, { path: pj.path, snapshot: info.snapshot });
+    if (!result.ok) { toast(result.error || `${verb}失败`, true); }
+    else { toast(action === 'archive' ? `已归档 ${result.succeeded} 条会话` : `已删除 ${result.succeeded} 条会话`); }
+    if (result.succeeded) {
+      loadCodexProjects._sig = null;
+      await loadCodexProjects();
+    }
+  } catch {
+    toast(action === 'archive' ? '归档失败' : '删除失败', true);
+  } finally {
+    codexProjectActions.delete(pj.path);
+  }
+}
+function showCodexProjectMenu(ev, pj) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  popupMenu(ev, [
+    { label: '归档', fn: () => runCodexProjectAction(pj, 'archive') },
+    { label: '删除', danger: true, fn: () => runCodexProjectAction(pj, 'delete') },
+  ]);
+}
+async function loadCodexProjects() {
+  let data;
+  try { data = await api('/api/codex-projects'); } catch { return; }
+  const list = (data.projects || []).slice(0, 8);
+  // 数据没变时只更新时间文字，避免定时刷新把用户展开的子树抹掉。
+  const sig = JSON.stringify(list);
+  if (sig === loadCodexProjects._sig) { refreshCodexProjectTimes(list); return; }
+  loadCodexProjects._sig = sig;
+  const ul = $('#codex-projects-list');
+  ul.innerHTML = '';
+  if (!list.length) { ul.innerHTML = '<div class="nav-empty">用 Codex 跑过的项目会出现在这里</div>'; return; }
+  list.forEach((pj) => {
+    const li = navDirLi(pj.name, pj.path);
+    li.querySelector('.label').title = `${pj.path}\nCodex · ${agoShort(pj.lastActive)}前活跃`;
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.append(agoShort(pj.lastActive));
+    li.appendChild(when);
+    li.oncontextmenu = (ev) => showCodexProjectMenu(ev, pj);
+    ul.appendChild(li);
+  });
+  renderRootsActive(); // 重渲后补一次高亮，让「当前所在的 Codex 项目」保持选中态
+}
+
+
+  return { loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects };
+}

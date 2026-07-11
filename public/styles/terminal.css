@@ -1,0 +1,117 @@
+/**
+ * [INPUT]: 依赖 index.html 的 DOM 结构与 base.css 定义的主题变量
+ * [OUTPUT]: 对外提供内嵌终端、停靠布局、拖放与桌面窗口适配样式
+ * [POS]: public/styles 的内嵌终端、停靠布局、拖放与桌面窗口适配样式分片，按 index.html 声明顺序参与级联
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
+/* ---------- 内嵌终端面板 ---------- */
+#main-body { flex: 1; display: flex; min-height: 0; min-width: 0; overflow: hidden; }
+#main-body.dock-bottom { flex-direction: column; }
+#main-body.dock-right { flex-direction: row; }
+/* 文件管理 = 文件区 + 预览（子集）；方向与终端 dock 垂直，二者互不抢空间 */
+/* 文件区吃掉「终端之外」的全部剩余空间（基准 0 + grow）；预览只在文件区内部切分，绝不波及终端 */
+#filemgmt { flex: 1 1 0; display: flex; min-height: 0; min-width: 0; overflow: hidden; }
+/* 离散切换（dock/最大化/预览开合）平滑过渡；拖拽时不加 lay-anim，保证跟手 */
+#main-body.lay-anim > #filemgmt, #main-body.lay-anim > #terminal-panel, #main-body.lay-anim #preview {
+  transition: flex-basis 0.22s ease, width 0.22s ease, height 0.22s ease, opacity 0.2s ease;
+}
+#preview:not(.hidden) { animation: edIn 0.2s ease; }
+.dock-bottom #filemgmt { flex-direction: row; }    /* 终端在下 → 预览落在文件区右侧 */
+.dock-right #filemgmt { flex-direction: column; }  /* 终端在右 → 预览落在文件区下方 */
+/* 终端最大化（高优先级）：文件管理让位，终端铺满中区；分割条保留，可以直接拖回 */
+#main-body.term-max > #filemgmt { display: none; }
+#main-body.term-max > #terminal-panel { flex: 1 1 auto !important; width: 100% !important; height: 100% !important; }
+#content { min-height: 0; min-width: 0; }
+
+#terminal-resizer { flex: 0 0 6px; background: transparent; z-index: 5; position: relative; }
+#terminal-resizer.hidden { display: none; }
+.dock-bottom #terminal-resizer { width: 100%; cursor: row-resize; }
+.dock-right #terminal-resizer { height: 100%; cursor: col-resize; }
+/* 终端拖到头：文件区彻底让位（不再留 4px 残条），拖拽条保留，往回拖即还原 */
+#main-body.fm-squeezed > #filemgmt { display: none; }
+#main-body.fm-squeezed > #terminal-panel { flex: 1 1 auto !important; width: auto !important; height: auto !important; }
+
+/* 终端尺寸只由分隔条/applyDock 的内联宽高决定，flex 不增不减——打开预览等都动不了它 */
+#terminal-panel { flex: 0 0 auto; display: flex; flex-direction: column; background: var(--bg); min-height: 0; min-width: 0; position: relative; }
+#terminal-panel.hidden { display: none; }
+#terminal-panel.term-drop { position: relative; }
+#terminal-panel.term-drop::after {
+  content: '松开 · 把路径插入终端'; position: absolute; inset: 6px; z-index: 20;
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: var(--radius);
+  background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+  animation: dropIn 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+@keyframes dropIn { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: scale(1); } }
+/* 拖入文件区落盘：整片区域高亮（存进当前目录）/ 某文件夹高亮（存进那个文件夹） */
+#file-area.area-drop { position: relative; }
+#file-area.area-drop::after {
+  content: '松开 · 存入当前目录'; position: absolute; inset: 4px; z-index: 20;
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+  border: 2px dashed var(--accent); border-radius: var(--radius);
+  background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600;
+  animation: dropIn 0.16s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+.item.drop-into { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-soft); border-radius: var(--radius); }
+.dock-bottom #terminal-panel { width: 100%; border-top: 1px solid var(--border); }
+.dock-right #terminal-panel { height: 100%; border-left: 1px solid var(--border); }
+
+.term-head { display: flex; align-items: center; justify-content: space-between; height: 34px; padding: 0 6px 0 8px; background: var(--bg-2); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+.term-tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.term-tabs::-webkit-scrollbar { display: none; }
+.term-tab { display: flex; align-items: center; gap: 5px; padding: 3px 9px; font-size: 12px; color: var(--text-dim); border-radius: 6px; cursor: pointer; white-space: nowrap; font-family: var(--font-mono); }
+.term-tab:hover { color: var(--text); }
+.term-tab.active { background: var(--bg-3); color: var(--text); }
+.term-tab .tab-x { opacity: 0.45; margin-left: 2px; }
+.term-tab .tab-x:hover { opacity: 1; color: var(--accent); }
+/* agent 态势小圆点：运行中(绿/呼吸) · 空闲(灰) · 已退出(红) */
+.term-tab .tab-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--text-dim); }
+.term-tab .tab-dot.busy { background: var(--green, #3fb950); animation: tabpulse 1.1s ease-in-out infinite; }
+.term-tab .tab-dot.idle { background: var(--text-dim); opacity: 0.5; }
+.term-tab .tab-dot.dead { background: var(--accent); }
+.term-tab.unread:not(.active) { color: var(--text); }
+.term-tab.unread:not(.active) .tab-dot.idle { background: var(--accent); opacity: 1; }
+@keyframes tabpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.term-actions { display: flex; gap: 2px; flex: 0 0 auto; align-items: center; }
+.term-actions button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 2px 7px; border-radius: 5px; line-height: 1; }
+.term-actions button:hover { color: var(--text); background: var(--bg-3); }
+/* Codex 一键启动 */
+.term-actions .codex-launch { display: inline-flex; align-items: center; justify-content: center; padding: 3px 6px; color: var(--text); }
+.term-actions .codex-launch:hover { background: var(--bg-3); }
+.term-actions .codex-launch svg, .term-actions .codex-launch img { display: block; flex: none; width: 15px; height: 15px; }
+.term-actions .codex-launch + #term-settings { margin-left: 2px; }
+
+/* 终端设置统一承载 Codex 启动、提示音和渲染偏好 */
+.terminal-settings-pop { position: fixed; z-index: 200; width: 240px; display: flex; flex-direction: column; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 40px rgba(0,0,0,0.32); overflow: hidden; }
+.terminal-settings-pop .tsp-head { padding: 9px 12px; font-size: 12px; font-weight: 600; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+.terminal-settings-pop .tsp-row { display: flex; align-items: center; gap: 9px; padding: 9px 12px; cursor: pointer; font-size: 13px; color: var(--text); }
+.terminal-settings-pop .tsp-row:hover { background: var(--bg-3); }
+.terminal-settings-pop .tsp-row input { accent-color: var(--accent); margin: 0; }
+
+#xterm-host { flex: 1; position: relative; min-height: 0; overflow: hidden; background: var(--bg); }
+/* xterm 6.0 的 Viewport 重写后不再用 JS 把 .xterm-viewport 刷成主题色，xterm.css 默认的 #000
+   会在行区底部的余高缝隙里露出来（黑带横跳）——改透明，让终端容器的主题背景透上来 */
+.xterm .xterm-viewport { background-color: transparent !important; }
+.xterm-instance { position: absolute; inset: 0; display: none; }
+.xterm-instance.show { display: block; }
+.xterm-instance .xterm { height: 100%; }
+
+/* ---------- 桌面 app：交通灯避让 + 顶部可拖拽 ---------- */
+/* hiddenInset 标题栏的红绿灯坐在左上角，给侧栏 logo 让出空间（浏览器版无此问题，不受影响）*/
+.desktop #sidebar { padding-top: 40px; }
+.desktop .brand { -webkit-app-region: drag; }
+/* 顶栏空白处也可拖窗，但其中的按钮/面包屑保持可点 */
+.desktop #topbar { -webkit-app-region: drag; }
+/* 侧栏不做整体拖拽区：#sidebar 自身是滚动容器（overflow-y:auto），而 Electron 的
+   app-region:drag 区域收不到滚轮事件——整栏 drag 会让滚动时灵时卡（#6 的方案回退）。
+   拖窗用品牌区和顶栏，足够顺手 */
+.desktop #topbar button, .desktop #topbar .breadcrumb, .desktop #topbar .seg, .desktop #topbar .toggle, .desktop #topbar input { -webkit-app-region: no-drag; }
+/* 预览全屏时顶栏被盖住，但它的 drag 区域是 OS 级遮罩、不认 z-index，会吞掉压在它上面的预览按钮的点击。
+   全屏期间把顶栏/品牌区的拖拽关掉，让预览自己的按钮可点（全屏本就不需要拖这条顶栏）。 */
+.desktop.preview-maxed #topbar, .desktop.preview-maxed .brand { -webkit-app-region: no-drag; }
+
+/* 终端头：文件跟随按钮 */
+.term-actions #file-follow { font-size: 11px; padding: 3px 8px; font-family: var(--font-ui); }
+.term-actions #file-follow.on { color: var(--accent); background: var(--accent-soft); }
+.term-actions #term-max.on { color: var(--accent-ink); background: var(--accent); }
+.nav-buttons #btn-sidebar.on { color: var(--accent); border-color: var(--accent); }

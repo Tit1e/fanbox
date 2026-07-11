@@ -1,0 +1,111 @@
+/**
+ * [INPUT]: 依赖 index.html 的 DOM 结构与 app.js 注入的顶层状态类名
+ * [OUTPUT]: 对外提供基础主题、全局排印、可访问性与页面顶层布局样式
+ * [POS]: public/styles 的基础主题、全局排印、可访问性与页面顶层布局样式分片，按 index.html 声明顺序参与级联
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
+/**
+ * [INPUT]: 依赖 index.html 的 DOM 结构与 app.js 注入的状态类名
+ * [OUTPUT]: 对外提供 CodexBox 三套主题、页面布局、文件预览、终端和通用弹层样式
+ * [POS]: public 模块的统一样式入口，约束渲染层视觉与响应式行为
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
+:root {
+  font-size: 14px;
+  --radius: 10px;
+  --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  /* 系统字体打头：mac 上即 SF Pro / SF Mono，原生质感；不依赖任何 webfont，离线一致 */
+  --font-ui: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", "Inter", sans-serif;
+  --font-display: var(--font-ui);
+  --font-mono: ui-monospace, "SF Mono", Menlo, "JetBrains Mono", monospace;
+  /* 内嵌终端字体：优先用户装的 Nerd Font（starship/powerline 字形才不变 tofu），没装回退系统等宽 */
+  --font-term: "JetBrainsMono Nerd Font", "MesloLGS NF", "FiraCode Nerd Font", "Hack Nerd Font", "Symbols Nerd Font Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-fname: var(--font-ui);
+}
+
+/* ===== 皮肤 1 · 终端核 Volt（默认深色，配色参考 Nike Volt）===== */
+[data-theme="terminal"] {
+  --bg: #0b0c0a; --bg-2: #131410; --bg-3: #1c1e17; --panel: #0e0f0c;
+  --border: #262920; --rule: #262920;
+  --text: #f2f2ea; --text-dim: #9b9d8c; --text-faint: #62655a;
+  --accent: #cdf24b; --accent-soft: #cdf24b1f; --accent-ink: #0b0c0a;
+  --green: #cdf24b; --yellow: #e6c07b;
+  --radius: 4px; --shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  --font-display: ui-monospace, "SF Mono", Menlo, monospace; --font-fname: ui-monospace, "SF Mono", Menlo, monospace;
+}
+/* ===== 皮肤 2 · 暖色纸感档案馆 ===== */
+[data-theme="warm"] {
+  --bg: #f5f0e8; --bg-2: #faf6ef; --bg-3: #ece2d2; --panel: #f1ebdf;
+  --border: #e3d9c8; --rule: #e3d9c8;
+  --text: #1a1a18; --text-dim: #6b6355; --text-faint: #a39882;
+  --accent: #cc785c; --accent-soft: #cc785c22; --accent-ink: #fffaf3;
+  --green: #7d8a55; --yellow: #c2893a;
+  --radius: 9px; --shadow: 0 14px 44px rgba(90, 66, 42, 0.18);
+  --font-display: 'Fraunces', Georgia, 'Songti SC', "STSong", serif; --font-fname: var(--font-ui);
+}
+/* ===== 皮肤 3 · 编辑式粗野 · 索引日报（参照 Bloomberg Businessweek）===== */
+[data-theme="editorial"] {
+  --bg: #f4f1ea; --bg-2: #ece8dd; --bg-3: #e4dfd2; --panel: #f4f1ea;
+  --border: #d6d1c3; --rule: #d6d1c3;
+  --text: #0a0a0a; --text-dim: #57534a; --text-faint: #8a857a;
+  --accent: #ff433d; --accent-soft: #ff433d1a; --accent-ink: #ffffff;
+  --green: #00a33e; --yellow: #0000ee;
+  --radius: 0px; --shadow: 0 8px 30px rgba(0, 0, 0, 0.22);
+  --font-display: var(--font-ui); --font-fname: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* 键盘可达性：仅键盘聚焦（Tab）时显示焦点环，鼠标点击不显示 */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
+.item:focus-visible, .row:focus-visible { outline-offset: -2px; }
+/* 降噪：尊重系统「减少动态效果」 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+}
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.25s, color 0.25s;
+}
+/* 暖色皮肤的纸张微纹理 */
+[data-theme="warm"] body { background-image: radial-gradient(rgba(140,110,70,0.05) 1px, transparent 1px); background-size: 4px 4px; }
+
+/* ---------- 主题相关排印 ---------- */
+.brand-name { font-family: var(--font-display); }
+#breadcrumb .crumb.last, .preview-title { font-family: var(--font-display); }
+.grid .item .fname, .list .row .fname { font-family: var(--font-fname); }
+[data-theme="editorial"] .brand-name { font-weight: 800; letter-spacing: -0.01em; }
+[data-theme="editorial"] #breadcrumb .crumb.last { font-weight: 800; }
+/* 编辑式皮肤：规则线列表 + 强墨色顶栏 */
+[data-theme="editorial"] .list .row { border-bottom: 1px solid var(--rule); border-radius: 0; }
+[data-theme="editorial"] .list .row.list-head { border-bottom: 2px solid var(--text); }
+[data-theme="editorial"] #topbar { border-bottom: 2px solid var(--text); }
+[data-theme="editorial"] .nav-title, [data-theme="terminal"] .nav-title { letter-spacing: 1.5px; }
+/* 编辑式皮肤的「骨相」：黑底列表头 + 反白选中行 + 硬阴影命令面板 + 行序号（对齐设计稿 C 的粗野感）*/
+[data-theme="editorial"] .list .row.list-head { background: var(--text); color: var(--bg); border-bottom: none; font-weight: 700; }
+[data-theme="editorial"] .list .row.selected { background: var(--text); color: var(--bg); }
+[data-theme="editorial"] .list .row.selected .fname,
+[data-theme="editorial"] .list .row.selected .meta,
+[data-theme="editorial"] .grid .item.selected { background: var(--text); border-color: var(--text); }
+[data-theme="editorial"] .grid .item.selected .fname { color: var(--bg); }
+[data-theme="editorial"] .cmdk-panel,
+[data-theme="editorial"] .input-dialog { border: 2px solid var(--text); border-radius: 0; box-shadow: 10px 10px 0 rgba(10, 10, 10, 0.9); backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg-2); }
+/* 列表行序号：编辑式日报的「№」标号 */
+[data-theme="editorial"] .list .row:not(.list-head) { counter-increment: rowidx; }
+[data-theme="editorial"] .list { counter-reset: rowidx; }
+[data-theme="editorial"] .list .row:not(.list-head) .icon::before { content: counter(rowidx); position: absolute; left: -2px; top: 50%; transform: translateY(-50%); font-family: var(--font-mono); font-size: 9px; font-weight: 700; color: var(--text-faint); }
+[data-theme="editorial"] .list .row .icon { position: relative; }
+
+/* 两栏：侧栏 | 主区（预览不再是顶层列，已归入文件管理）；列宽由 JS applyLayout 内联 */
+#app { display: grid; grid-template-columns: 248px 1fr; height: 100vh; }
+/* 折叠：侧栏退出栅格 + 单列让主区铺满（JS applyLayout 也会内联同值，双保险） */
+#app.sidebar-collapsed { grid-template-columns: 1fr; }
+#app.sidebar-collapsed > #sidebar { display: none; }
+/* 折叠后顶栏贴到窗口左缘，给 macOS 红绿灯让位 */
+#app.sidebar-collapsed #topbar { padding-left: 80px; }

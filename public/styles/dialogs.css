@@ -1,0 +1,134 @@
+/**
+ * [INPUT]: 依赖 index.html 的 DOM 结构与 base.css 定义的主题变量
+ * [OUTPUT]: 对外提供编辑器、图片工具、输入弹窗与右键菜单样式
+ * [POS]: public/styles 的编辑器、图片工具、输入弹窗与右键菜单样式分片，按 index.html 声明顺序参与级联
+ * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+ */
+/* ---------- 文件操作：编辑器 / 输入弹窗 / 右键菜单 ---------- */
+/* 原地文本编辑器 */
+.editor-bar { display: flex; align-items: center; gap: 8px; padding: 4px 0 10px; }
+.editor-bar button { padding: 5px 15px; border-radius: 7px; font-size: 12px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-3); color: var(--text); transition: 0.12s; line-height: 1.4; }
+.editor-bar button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.editor-bar button.primary:hover { filter: brightness(1.06); }
+.editor-bar button.ghost-btn { color: var(--text-dim); }
+.editor-bar button.ghost-btn:hover { color: var(--text); border-color: var(--accent); }
+.editor-bar button:disabled { opacity: 0.32; cursor: default; pointer-events: none; }
+.editor-hint { font-size: 11px; color: var(--text-faint); margin-left: auto; }
+.editor-area {
+  width: 100%; box-sizing: border-box; min-height: 60vh; resize: vertical;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px; font-family: var(--font-mono);
+  font-size: 13px; line-height: 1.7; tab-size: 2;
+}
+.editor-area:focus { outline: none; border-color: var(--accent); }
+/* Monaco 宿主：占满预览区可用高度，圆角裁掉内部直角 */
+.mona-host {
+  width: 100%; height: calc(100vh - 184px); min-height: 360px;
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+}
+.mona-host .monaco-editor, .mona-host .monaco-editor .overflow-guard { border-radius: var(--radius); }
+
+/* Milkdown Crepe 所见即所得编辑器宿主：随皮肤变量呼吸 */
+.crepe-host {
+  height: calc(100vh - 184px); min-height: 360px; overflow: auto;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+}
+.crepe-host .milkdown {
+  --crepe-color-background: transparent;
+  --crepe-color-on-background: var(--text);
+  --crepe-color-on-surface: var(--text);
+  --crepe-color-on-surface-variant: var(--text-dim);
+  --crepe-color-primary: var(--accent);
+  --crepe-color-secondary: var(--bg-3);
+  --crepe-color-outline: var(--border);
+  --crepe-color-hover: var(--accent-soft);
+  --crepe-color-selected: var(--accent-soft);
+  --crepe-color-inline-area: var(--bg-2);
+  --crepe-font-default: var(--font-ui);
+  --crepe-font-title: var(--font-display);
+  --crepe-font-code: var(--font-mono);
+  background: transparent;
+}
+.crepe-host .milkdown .ProseMirror { padding: 22px 26px; }
+/* 编辑器面板进入的物理感淡入，避免 DOM 替换的硬切 */
+.crepe-host, .mona-host, .imgedit-canvas-wrap { animation: edIn 0.18s ease; }
+@keyframes edIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+/* Crepe 代码块/引用与正文同呼吸 */
+.crepe-host .milkdown pre, .crepe-host .milkdown blockquote { margin-top: 1em; margin-bottom: 1em; }
+/* 暗皮肤补深色表面/弹层（frame 默认是浅色） */
+[data-theme="terminal"] .crepe-host .milkdown {
+  --crepe-color-surface: #16180f; --crepe-color-surface-low: #1c1f15;
+  --crepe-color-inline-code: #e8825b; --crepe-shadow-1: 0 1px 3px rgba(0,0,0,.5); --crepe-shadow-2: 0 4px 14px rgba(0,0,0,.55);
+}
+
+/* 图片编辑器 */
+.imgedit-tools { display: flex; align-items: center; gap: 8px; padding: 4px 0 10px; flex-wrap: wrap; }
+.ie-seg { display: inline-flex; gap: 2px; background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 2px; }
+.ie-seg button { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 26px; border: none; background: transparent; color: var(--text-dim); border-radius: calc(var(--radius) - 2px); cursor: pointer; transition: background-color 0.14s ease, color 0.14s ease; }
+.ie-seg button:hover { background: var(--bg-3); color: var(--text); }
+.ie-seg button.active { background: var(--accent); color: var(--accent-ink); box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 28%, transparent), 0 1px 2px color-mix(in srgb, var(--accent) 40%, transparent); }
+/* 控件图标「描边里藏光」：极淡上高光 + 下沉影，去掉纯平 web 矢量味 */
+.topbar-actions svg, .ie-seg svg, .term-actions button svg, .preview-actions svg { filter: drop-shadow(0 0.5px 0 color-mix(in srgb, #000 14%, transparent)); }
+/* 取色器：去掉系统 chrome，做成干净的圆色块，消除网页味 */
+.imgedit-tools input[type=color] { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: none; cursor: pointer; overflow: hidden; box-shadow: inset 0 0 0 2px var(--bg); }
+.imgedit-tools input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.imgedit-tools input[type=color]::-webkit-color-swatch { border: none; border-radius: 50%; }
+.imgedit-tools input[type=range], .imgedit-export input[type=range] { width: 84px; accent-color: var(--accent); }
+.ie-thick { display: inline-flex; align-items: center; gap: 8px; }
+.ie-thick i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); flex-shrink: 0; transition: width 0.1s, height 0.1s; }
+.imgedit-canvas-wrap { background: repeating-conic-gradient(var(--bg-2) 0% 25%, var(--bg-3) 0% 50%) 50% / 20px 20px; border: 1px solid var(--border); border-radius: var(--radius); overflow: auto; max-height: calc(100vh - 250px); display: flex; justify-content: center; align-items: flex-start; }
+#ie-canvas { max-width: 100%; height: auto; cursor: crosshair; display: block; }
+.imgedit-export { display: flex; align-items: center; gap: 14px; padding: 12px 0 2px; flex-wrap: wrap; font-size: 12px; color: var(--text-dim); }
+.imgedit-export label { display: inline-flex; align-items: center; gap: 6px; }
+/* 下拉去系统样式 + 自绘箭头，与自绘控件统一 */
+.imgedit-export select, .imgedit-export input[type=number] { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); padding: 4px 8px; font-size: 12px; font-family: inherit; }
+.imgedit-export select { -webkit-appearance: none; appearance: none; padding-right: 22px; cursor: pointer; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/></svg>"); background-repeat: no-repeat; background-position: right 7px center; }
+.imgedit-export select:focus, .imgedit-export input:focus { outline: none; border-color: var(--accent); }
+.imgedit-export .ie-spacer { flex: 1; }
+/* 保存主按钮：.primary 此前只在 preview-actions/editor-bar 下有样式，这里没兜住会露出原生白按钮 */
+.imgedit-export button.primary { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); font-weight: 600; padding: 5px 14px; border-radius: 7px; cursor: pointer; font-size: 12px; }
+.imgedit-export button.primary:hover { filter: brightness(1.06); }
+/* 编辑图片时面板撑满整窗——小预览栏里没法精细标注。靠 :has 感知编辑器 DOM：进入即全屏，任何退出路径（关闭/切文件/保存）替换掉 DOM 就自动还原，无需 JS 管理状态。z-index 必须低于弹窗层（.input-overlay 60），文字/另存为弹窗才能浮在上面 */
+#preview:has(.imgedit-tools) { position: fixed; inset: 0; z-index: 55; border: none; }
+#preview:has(.imgedit-tools) .preview-body { display: flex; flex-direction: column; }
+#preview:has(.imgedit-tools) .imgedit-canvas-wrap { flex: 1; min-height: 0; max-height: none; align-items: center; }
+#preview:has(.imgedit-tools) #ie-canvas { max-height: 100%; width: auto; height: auto; }
+#main-body:has(.imgedit-tools) #preview-resizer { display: none; }
+
+/* 通用输入弹窗 */
+.input-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.42); z-index: 60;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 18vh;
+}
+.input-dialog {
+  width: 420px; max-width: 92vw; background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 14px; box-shadow: var(--shadow); padding: 18px;
+}
+.input-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+.input-field {
+  width: 100%; box-sizing: border-box; background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px;
+  font-size: 14px; font-family: var(--font-ui);
+}
+.input-field:focus { outline: none; border-color: var(--accent); }
+.input-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.input-actions button {
+  padding: 7px 16px; border-radius: var(--radius); cursor: pointer; font-size: 13px;
+  font-family: var(--font-ui); border: 1px solid var(--border); background: var(--bg-3); color: var(--text-dim);
+}
+.input-actions button:hover { color: var(--text); border-color: var(--accent); }
+.input-actions button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+
+/* 右键上下文菜单 */
+.context-menu {
+  position: fixed; z-index: 70; min-width: 168px; padding: 5px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow);
+}
+.ctx-item {
+  padding: 7px 12px; font-size: 13px; color: var(--text-dim); cursor: pointer;
+  border-radius: 6px; transition: 0.1s; white-space: nowrap;
+}
+.ctx-item:hover { background: var(--bg-3); color: var(--text); }
+.ctx-item.danger { color: #e06a5b; }
+.ctx-item.danger:hover { background: #e06a5b1a; color: #e06a5b; }
+.ctx-sep { height: 1px; background: var(--border); margin: 5px 4px; }

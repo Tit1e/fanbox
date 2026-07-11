@@ -56,7 +56,7 @@
 
 排查结论：**app 代码只「读」Spotlight，不「写/改」**，安装方式也不碰索引配置。
 
-- `server.js:345` 注释明确：「Spotlight（mdfind）内容搜索：白嫖系统索引」——只调 `mdfind` **查询**索引，给文件搜索功能用。
+- `server/browser-service.js` 的 `mdfind` 只**查询** Spotlight 索引，给文件搜索功能使用。
 - `electron/main.js:395` 只是提到 Spotlight 会扫文件。
 - 全项目（排除 vendor）搜 `mdutil` / `metadata_never_index` / `.Spotlight-V100` 的**唯一命中**来自本次调试工具写入的本地权限白名单，不是 app 代码。
 - `mdfind` 是纯只读查询命令，**不可能**关闭 / 损坏 / 重置索引。

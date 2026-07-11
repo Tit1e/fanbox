@@ -1,5 +1,5 @@
 <!--
-  [INPUT]: 依赖 style.css、app.js、i18n.js 和本地 vendor 浏览器资源
+  [INPUT]: 依赖 styles/ 样式分片、app.js、i18n.js 和本地 vendor 浏览器资源
   [OUTPUT]: 对外提供 CodexBox 单页应用的文件区、预览区、终端区和通用弹层 DOM 骨架
   [POS]: public 模块的页面入口，定义渲染层组件挂载点与脚本加载顺序
   [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -10,7 +10,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CodexBox</title>
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/styles/base.css" />
+  <link rel="stylesheet" href="/styles/sidebar.css" />
+  <link rel="stylesheet" href="/styles/workspace.css" />
+  <link rel="stylesheet" href="/styles/preview.css" />
+  <link rel="stylesheet" href="/styles/dialogs.css" />
+  <link rel="stylesheet" href="/styles/terminal.css" />
+  <link rel="stylesheet" href="/styles/follow.css" />
   <!-- 内嵌终端（仅桌面 app 启用，浏览器版自动降级）：本地 vendor，离线可用 -->
   <link rel="stylesheet" href="/vendor/xterm/xterm.css" onerror="window.__noXterm=1" />
 </head>
@@ -152,6 +158,6 @@
   <script src="/vendor/xterm/addon-clipboard.js" onerror="window.__noClipboard=1"></script>
   <script src="/i18n-dict.js" onerror="window.__noDict=1"></script>
   <script src="/i18n.js"></script>
-  <script src="/app.js"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>
