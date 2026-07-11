@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function createSidebarController(deps) {
-  const { $, api, apiPost, state, svgWrap, SVG, escapeHtml, dirOf, navigate, makeDraggablePath, openPreview, renderFiles, toggleFav, toast, confirmDialog, popupMenu, codexProjects } = deps;
+  const { $, api, apiPost, state, svgWrap, SVG, escapeHtml, dirOf, navigate, makeDraggablePath, openPreview, renderFiles, toggleFav, toast, confirmDialog, popupMenu, codexProjects, favorites } = deps;
 // ---------- 侧边栏 ----------
 // 侧栏目录树：目录项带展开箭头，点箭头逐级懒加载子目录（只列文件夹），点行本身仍是跳转
 function navDirLi(name, p) {
@@ -58,6 +58,7 @@ function renderRootsActive() {
     ul.querySelectorAll('li').forEach((li) => li.classList.toggle('active', li.dataset.path === state.cwd));
   });
   codexProjects.setActive(state.cwd);
+  favorites.setActive(state.cwd);
 }
 async function loadFavorites() {
   const data = await api('/api/favorites');
@@ -66,28 +67,12 @@ async function loadFavorites() {
   renderFavs();
 }
 function renderFavs() {
-  const ul = $('#favs-list');
-  ul.innerHTML = '';
-  if (!state.favorites.length) { ul.innerHTML = '<div class="nav-empty">悬停文件点 ☆ 即可收藏</div>'; return; }
-  state.favorites.forEach((f) => {
-    let li;
-    if (f.isDir) {
-      li = navDirLi(f.name, f.path);
-    } else {
-      li = document.createElement('li');
-      li.innerHTML = `<span class="ico">${svgWrap(SVG.file, 'currentColor', 16)}</span><span class="label" title="${escapeHtml(f.path)}">${escapeHtml(f.name)}</span>`;
-      li.onclick = () => navigate(dirOf(f.path)).then(() => { const e = state.entries.find((x) => x.path === f.path); if (e) { state.selected = f.path; openPreview(e); renderFiles(); } });
-      makeDraggablePath(li, f.path);
-    }
-    const un = document.createElement('span');
-    un.className = 'unfav';
-    un.title = '移除';
-    un.textContent = '✕';
-    un.onclick = (ev) => { ev.stopPropagation(); toggleFav(f); };
-    li.appendChild(un);
-    ul.appendChild(li);
-  });
-  renderRootsActive(); // 重渲后补一次高亮，让「当前所在的收藏」保持选中态
+  favorites.render(state.favorites, state.cwd);
+}
+async function openFavoriteFile(favorite) {
+  await navigate(dirOf(favorite.path));
+  const entry = state.entries.find((item) => item.path === favorite.path);
+  if (entry) { state.selected = favorite.path; openPreview(entry); renderFiles(); }
 }
 // Codex 项目：从本机 Codex 会话日志发现最近处理过的项目文件夹
 const codexProjectActions = new Set();
@@ -131,5 +116,5 @@ async function loadCodexProjects() {
 }
 
 
-  return { loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects, showCodexProjectMenu };
+  return { loadRoots, renderRootsActive, loadFavorites, renderFavs, loadCodexProjects, showCodexProjectMenu, openFavoriteFile };
 }

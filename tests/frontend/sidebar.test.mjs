@@ -44,6 +44,7 @@ function createHarness(responses = {}) {
     },
     popupMenu: (_event, items) => { menuItems = items; },
     codexProjects: { render: () => {}, setActive: () => {} },
+    favorites: { render: () => {}, setActive: () => {} },
   });
   return { controller, calls, getMenuItems: () => menuItems };
 }

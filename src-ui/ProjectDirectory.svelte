@@ -7,7 +7,7 @@
 <script>
   import ProjectDirectory from './ProjectDirectory.svelte';
 
-  let { item, activePath, listDirectories, navigate, makeDraggable, folderIcon, topLevel = false, activeText = '', onMenu = null } = $props();
+  let { item, activePath, listDirectories, navigate, makeDraggable, folderIcon, activeText = '', showTime = false, title = item.path, onMenu = null, onRemove = null } = $props();
   let expanded = $state(false), loading = $state(false), loaded = $state(false), children = $state([]);
 
   function drag(node) { makeDraggable(node, item.path); }
@@ -42,12 +42,13 @@
   tabindex="0"
   onclick={activate}
   onkeydown={activate}
-  oncontextmenu={topLevel && onMenu ? onMenu : undefined}
+  oncontextmenu={onMenu || undefined}
 >
   <span class="twirl" role="button" tabindex="0" title="展开子文件夹" onclick={toggle} onkeydown={toggleByKey}>{expanded ? '▾' : '▸'}</span>
   <span class="ico">{@html folderIcon}</span>
-  <span class="label" title={topLevel ? `${item.path}\nCodex · ${activeText}前活跃` : item.path}>{item.name}</span>
-  {#if topLevel}<span class="when">{activeText}</span>{/if}
+  <span class="label" {title}>{item.name}</span>
+  {#if showTime}<span class="when">{activeText}</span>{/if}
+  {#if onRemove}<span class="unfav" role="button" tabindex="0" title="移除" onclick={(event) => { event.stopPropagation(); onRemove(item); }} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); onRemove(item); } }}>✕</span>{/if}
 </li>
 {#if expanded}
   <ul class="nav-list nav-sub">

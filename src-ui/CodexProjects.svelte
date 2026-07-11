@@ -37,8 +37,9 @@
       {navigate}
       {makeDraggable}
       {folderIcon}
-      topLevel
+      showTime
       activeText={agoShort(project.lastActive)}
+      title={`${project.path}\nCodex · ${agoShort(project.lastActive)}前活跃`}
       onMenu={(event) => openMenu(event, project)}
     />
   {/each}
