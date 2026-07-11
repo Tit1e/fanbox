@@ -2153,6 +2153,7 @@ function bindEvents() {
       { label: '新建文件夹…', fn: () => doCreate('dir') },
       { label: '新建文件…', fn: () => doCreate('file') },
       { sep: true },
+      { label: '在 Finder 显示', fn: () => openWith(state.cwd, 'reveal') },
       { label: '在终端打开', fn: () => term.openInDir(state.cwd) },
       { label: 'AI 整理…', fn: () => organizeLaunch(state.cwd) },
       { label: '磁盘占用透视', fn: () => diskPanel(state.cwd) },
