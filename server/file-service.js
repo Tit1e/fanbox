@@ -18,7 +18,7 @@ function validName(name) {
   return value.length > 0 && value.length <= 255 && !/[\/\\\0]/.test(value) && value !== '.' && value !== '..';
 }
 
-function createFileService({ home, platform, resolvePath, textExt, ext, searchFiles, mdfind }) {
+function createFileService({ home, platform, resolvePath, textExt, ext, searchFiles, mdfind, execCommand = exec }) {
   async function writeTextFile(input, content, expectedMtime) {
     const file = resolvePath(input);
     if (!textExt.has(ext(file))) throw new Error('只支持文本类文件编辑');
@@ -51,7 +51,7 @@ function createFileService({ home, platform, resolvePath, textExt, ext, searchFi
         const method = isDir ? 'DeleteDirectory' : 'DeleteFile';
         command = `powershell -NoProfile -Command "Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::${method}('${target.replace(/'/g, "''")}','OnlyErrorDialogs','SendToRecycleBin')"`;
       } else command = `gio trash ${shellQuote(target)} || trash-put ${shellQuote(target)} || trash ${shellQuote(target)}`;
-      exec(command, (error) => {
+      execCommand(command, (error) => {
         if (!error) return resolve({ ok: true });
         let message = error.message;
         if (platform === 'darwin' && /-1743|-600|not allowed|authoriz/i.test(message)) message = '需在「系统设置 → 隐私与安全性 → 自动化」里允许 CodexBox 控制 Finder（首次删除会弹授权）';
@@ -159,7 +159,7 @@ function createFileService({ home, platform, resolvePath, textExt, ext, searchFi
       if (platform === 'darwin') command = withApp === 'reveal' ? `open -R ${shellQuote(target)}` : `open ${shellQuote(target)}`;
       else if (platform === 'win32') command = withApp === 'reveal' ? `explorer /select,"${target}"` : `start "" "${target}"`;
       else command = withApp === 'reveal' ? `xdg-open ${shellQuote(path.dirname(target))}` : `xdg-open ${shellQuote(target)}`;
-      exec(command, (error) => resolve(error ? { ok: false, error: error.message } : { ok: true, with: withApp || 'default' }));
+      execCommand(command, (error) => resolve(error ? { ok: false, error: error.message } : { ok: true, with: withApp || 'default' }));
     });
   }
   function openInOS(target, withApp) {
@@ -167,7 +167,7 @@ function createFileService({ home, platform, resolvePath, textExt, ext, searchFi
     if (withApp === 'terminal') {
       const dir = (() => { try { return fs.statSync(target).isDirectory() ? target : path.dirname(target); } catch { return path.dirname(target); } })();
       const command = platform === 'darwin' ? `open -a Terminal ${shellQuote(dir)}` : platform === 'win32' ? `start "" cmd /K cd /d "${dir}"` : `x-terminal-emulator --working-directory=${shellQuote(dir)} || gnome-terminal --working-directory=${shellQuote(dir)} || xterm`;
-      return new Promise((resolve) => exec(command, (error) => resolve(error ? { ok: false, error: error.message } : { ok: true, with: 'terminal' })));
+      return new Promise((resolve) => execCommand(command, (error) => resolve(error ? { ok: false, error: error.message } : { ok: true, with: 'terminal' })));
     }
     return new Promise((resolve) => {
       const child = spawn('code', [target], { stdio: 'ignore', detached: true });
