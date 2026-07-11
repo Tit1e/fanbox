@@ -4,13 +4,11 @@ Electron 33.4.11 + Node.js >=18 + xterm.js 6.0.0 + node-pty 1.1.0 + 原生 HTML/
 <directory>
 assets/ - README 与宣传页使用的产品截图和横幅
 build/ - macOS 应用图标、权限与签名资源
-design-demos/ - 视觉方案与交互原型
 docs/ - 产品、架构、验收与故障记录
 electron/ - Electron 主进程、预加载安全桥接和桌面系统能力
 experiments/ - 可独立执行的回归验证与技术实验
 public/ - 浏览器渲染层、样式和本地 vendor 资源
 src-vendor/ - vendor 浏览器包的 esbuild 源入口
-素材/ - 产品设计原始素材
 </directory>
 
 <config>
