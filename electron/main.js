@@ -16,6 +16,7 @@ const {
 const { createPtyService } = require('./pty-service');
 const { createFileWatchService } = require('./file-watch-service');
 const { createSystemFileService } = require('./system-file-service');
+const { createLidGuard } = require('./power-service');
 
 const APP_NAME = 'CodexBox';
 app.setName(APP_NAME);
@@ -38,7 +39,13 @@ const send = (channel, payload) => {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
 };
 let terminalCount = 0;
-const ptyService = createPtyService({ pty, send, onCountChange: (count) => { terminalCount = count; refreshLidGuard(); } });
+const lidGuard = createLidGuard({
+  platform: process.platform,
+  setDisableSleep: trySetDisableSleep,
+  persist: (value) => writeConfig({ lidStayAwake: value }),
+  onChange: () => buildMenu(),
+});
+const ptyService = createPtyService({ pty, send, onCountChange: (count) => { terminalCount = count; lidGuard.refresh(count); } });
 const watchService = createFileWatchService({ send });
 const systemFileService = createSystemFileService({ app, nativeImage, clipboard });
 
@@ -104,7 +111,7 @@ app.whenReady().then(() => {
   // 会把本地请求拦成 502 → 整个界面白屏。给 loopback 显式加旁路；其余（如查更新走 GitHub）仍按系统代理，互不影响。
   session.defaultSession.setProxy({ mode: 'system', proxyBypassRules: 'localhost;127.0.0.1;[::1]' }).catch(() => { /* 设置失败就退回默认行为，不影响启动 */ });
   // 合盖继续运行：恢复上次的开关意图；启动时把残留的禁休眠清掉（防上次崩溃没恢复），有终端跑起来再按需重新生效
-  lidIntent = !!readConfig().lidStayAwake;
+  lidGuard.restore(!!readConfig().lidStayAwake, terminalCount);
   if (process.platform === 'darwin') trySetDisableSleep(false);
   buildMenu();
   try {
@@ -311,9 +318,6 @@ function writeConfig(patch) {
   try { const c = readConfig(); Object.assign(c, patch); fs.mkdirSync(path.dirname(CONFIG), { recursive: true }); fs.writeFileSync(CONFIG, JSON.stringify(c, null, 2)); }
   catch { /* 写失败不致命，下次再写 */ }
 }
-let lidIntent = false; // 用户意图（菜单勾选），跨会话持久
-let lidActive = false; // 当前是否已对系统下达禁休眠
-
 // 用 sudo -n（非交互）切换；sudoers 没装好就直接失败、绝不在后台弹密码
 function trySetDisableSleep(on) {
   if (process.platform !== 'darwin') return false;
@@ -351,20 +355,6 @@ function installSudoers() {
   });
 }
 
-// 按「用户意图 × 终端存活」结算系统状态，终端起落和开关变化都调用，保持幂等。
-function refreshLidGuard() {
-  if (process.platform !== 'darwin') return;
-  const want = lidIntent && terminalCount > 0;
-  if (want === lidActive) return;
-  const ok = trySetDisableSleep(want);
-  if (want && !ok) { // 免密规则丢了，退回关闭，别让用户以为还护着
-    lidIntent = false;
-    writeConfig({ lidStayAwake: false });
-  }
-  lidActive = want && ok;
-  buildMenu();
-}
-
 // 菜单勾选/取消的入口
 async function setLidIntent(on) {
   console.log('[lid] setLidIntent called, on =', on);
@@ -387,15 +377,13 @@ async function setLidIntent(on) {
       if (!installed) { buildMenu(); return; } // 装失败/取消 → 保持关闭
     }
   }
-  lidIntent = on;
-  writeConfig({ lidStayAwake: on });
-  refreshLidGuard();
-  buildMenu();
+  lidGuard.setIntent(on, terminalCount);
 }
 
 // 原生菜单——关键是 Edit role，终端里的 ⌘C/⌘V 才生效
 function buildMenu() {
   const isMac = process.platform === 'darwin';
+  const { intent: lidIntent, active: lidActive } = lidGuard.state();
   const template = [
     ...(isMac ? [{ label: APP_NAME, submenu: [
       { role: 'about', label: M('关于 CodexBox', 'About CodexBox') },
@@ -462,11 +450,11 @@ app.on('before-quit', (e) => {
 app.on('window-all-closed', () => {
   ptyService.killAll();
   watchService.closeAll();
-  if (lidActive) { trySetDisableSleep(false); lidActive = false; } // 终端没了，别让 Mac 一直不睡
+  lidGuard.shutdown();
   if (process.platform !== 'darwin') app.quit();
 });
 // 退出兜底：无论怎么退（⌘Q、崩溃前的正常退出），都恢复系统休眠，绝不留禁休眠的烂摊子
-app.on('will-quit', () => { if (process.platform === 'darwin') trySetDisableSleep(false); });
+app.on('will-quit', () => lidGuard.shutdown());
 
 // ---------- 领域服务 IPC ----------
 ipcMain.handle('pty:spawn', (event, payload) => ptyService.spawn(payload));

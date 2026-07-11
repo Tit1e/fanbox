@@ -8,7 +8,7 @@
   "main": "electron/main.js",
   "scripts": {
     "test": "node --test tests/server/*.test.js tests/frontend/*.test.mjs tests/electron/*.test.js",
-    "check": "node --check server.js && find server -name '*.js' -exec node --check {} \\; && node --input-type=module --check < public/app.js && find public/modules -name '*.js' -exec sh -c 'node --input-type=module --check < \"$1\"' _ {} \\; && node --check public/i18n-dict.js && npm test",
+    "check": "node --check server.js && find server electron -name '*.js' -exec node --check {} \\; && node --input-type=module --check < public/app.js && find public/modules -name '*.js' -exec sh -c 'node --input-type=module --check < \"$1\"' _ {} \\; && node --check public/i18n-dict.js && npm test",
     "start": "node server.js --dev",
     "app": "electron .",
     "rebuild": "electron-rebuild -f -w node-pty",
