@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('codexboxPty', {
   resize: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
   kill: (id) => ipcRenderer.send('pty:kill', { id }),
   cwd: (id) => ipcRenderer.invoke('pty:cwd', { id }),
+  hasForegroundProcess: (id) => ipcRenderer.invoke('pty:has-foreground-process', { id }),
   onData: (cb) => { const h = (e, m) => cb(m); ipcRenderer.on('pty:data', h); return () => ipcRenderer.removeListener('pty:data', h); },
   onExit: (cb) => { const h = (e, m) => cb(m); ipcRenderer.on('pty:exit', h); return () => ipcRenderer.removeListener('pty:exit', h); },
 });

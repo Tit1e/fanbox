@@ -483,6 +483,15 @@ const term = {
     this.renderTabs();
     return sess;
   },
+  newTerminal() {
+    if (!this.available()) { if (state.cwd) openWith(state.cwd, 'terminal'); return null; }
+    const hidden = $('#terminal-panel').classList.contains('hidden');
+    const hadSessions = this.sessions.length > 0;
+    if (hidden) this.open();
+    // open() 会在首次展开且没有会话时自动创建一个，避免首次 Cmd+T 连开两个标签。
+    if (hidden && !hadSessions) return null;
+    return this.newTab();
+  },
   async respawn(sess) {
     sess.dead = false;
     sess.xterm.reset(); // 清掉死亡残留，新 shell 提示符不和旧画面叠在一起
@@ -535,7 +544,8 @@ const term = {
   async closeActive() {
     const session = this.sessions.find((x) => x.id === this.active);
     if (!session) return false;
-    if (session.status === 'busy') {
+    const foreground = await window.codexboxPty.hasForegroundProcess(session.id).catch(() => ({ ok: false, running: false }));
+    if (foreground.ok && foreground.running) {
       if (this._closePrompting) return false;
       this._closePrompting = true;
       try {
@@ -548,7 +558,7 @@ const term = {
   },
   bindDesktopEvents() {
     if (window.codexboxWin?.onNewTerminal && !this._removeNewTerminal) {
-      this._removeNewTerminal = window.codexboxWin.onNewTerminal(() => this.newTab());
+      this._removeNewTerminal = window.codexboxWin.onNewTerminal(() => this.newTerminal());
     }
     if (window.codexboxWin?.onCloseActiveTerminal && !this._removeCloseActiveTerminal) {
       this._removeCloseActiveTerminal = window.codexboxWin.onCloseActiveTerminal(() => this.closeActive());

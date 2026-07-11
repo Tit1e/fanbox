@@ -10,12 +10,12 @@ import { installDom, loadRendererModule } from './dom-environment.mjs';
 
 const { createTerminalController } = await loadRendererModule('terminal');
 
-function createController({ confirm = async () => true } = {}) {
+function createController({ confirm = async () => true, foreground = async () => ({ ok: true, running: false }), query = () => null } = {}) {
   const killed = [];
-  window.codexboxPty = { kill: (id) => killed.push(id) };
+  window.codexboxPty = { kill: (id) => killed.push(id), hasForegroundProcess: foreground };
   const noop = () => {};
   const deps = new Proxy({
-    $: () => null,
+    $: query,
     state: {},
     follow: {},
     confirmDialog: confirm,
@@ -50,12 +50,15 @@ test('关闭空闲活动终端时直接复用标签关闭逻辑', async () => {
   } finally { dom.cleanup(); }
 });
 
-test('关闭忙碌终端前要求确认，取消时保留任务', async () => {
+test('存在真实前台进程时要求确认，取消后保留任务', async () => {
   const dom = installDom();
   try {
     let prompted = 0;
-    const { term, killed } = createController({ confirm: async () => { prompted++; return false; } });
-    term.sessions = [session('t1', 'busy')];
+    const { term, killed } = createController({
+      confirm: async () => { prompted++; return false; },
+      foreground: async () => ({ ok: true, running: true }),
+    });
+    term.sessions = [session('t1')];
     term.active = 't1';
 
     assert.equal(await term.closeActive(), false);
@@ -65,14 +68,17 @@ test('关闭忙碌终端前要求确认，取消时保留任务', async () => {
   } finally { dom.cleanup(); }
 });
 
-test('忙碌终端确认期间忽略重复关闭请求', async () => {
+test('前台进程确认期间忽略重复关闭请求', async () => {
   const dom = installDom();
   try {
     let prompted = 0;
     let resolveConfirm;
     const pendingConfirm = new Promise((resolve) => { resolveConfirm = resolve; });
-    const { term } = createController({ confirm: () => { prompted++; return pendingConfirm; } });
-    term.sessions = [session('t1', 'busy')];
+    const { term } = createController({
+      confirm: () => { prompted++; return pendingConfirm; },
+      foreground: async () => ({ ok: true, running: true }),
+    });
+    term.sessions = [session('t1')];
     term.active = 't1';
 
     const first = term.closeActive();
@@ -80,6 +86,21 @@ test('忙碌终端确认期间忽略重复关闭请求', async () => {
     assert.equal(prompted, 1);
     resolveConfirm(false);
     assert.equal(await first, false);
+  } finally { dom.cleanup(); }
+});
+
+test('界面状态仍为 busy 但 Shell 没有前台任务时直接关闭', async () => {
+  const dom = installDom();
+  try {
+    let prompted = 0;
+    const { term, killed } = createController({ confirm: async () => { prompted++; return true; } });
+    term.sessions = [session('t1', 'busy'), session('t2')];
+    term.active = 't1';
+    term.activate = (id) => { term.active = id; };
+
+    assert.equal(await term.closeActive(), true);
+    assert.equal(prompted, 0);
+    assert.deepEqual(killed, ['t1']);
   } finally { dom.cleanup(); }
 });
 
@@ -96,7 +117,7 @@ test('桌面新建与关闭事件各绑定一次并复用终端控制器', () =>
     const { term } = createController();
     let created = 0;
     let closed = 0;
-    term.newTab = () => { created++; };
+    term.newTerminal = () => { created++; };
     term.closeActive = () => { closed++; };
 
     term.bindDesktopEvents();
@@ -107,5 +128,24 @@ test('桌面新建与关闭事件各绑定一次并复用终端控制器', () =>
     assert.equal(subscribed, 2);
     assert.equal(created, 1);
     assert.equal(closed, 1);
+  } finally { dom.cleanup(); }
+});
+
+test('新建终端快捷键会先展开已收起的终端面板', () => {
+  const dom = installDom();
+  try {
+    const panel = { classList: { contains: (name) => name === 'hidden' } };
+    const { term } = createController({ query: (selector) => selector === '#terminal-panel' ? panel : null });
+    term.sessions = [session('t1')];
+    term.available = () => true;
+    let opened = 0;
+    let created = 0;
+    term.open = () => { opened++; };
+    term.newTab = () => { created++; };
+
+    term.newTerminal();
+
+    assert.equal(opened, 1);
+    assert.equal(created, 1);
   } finally { dom.cleanup(); }
 });

@@ -198,7 +198,7 @@ function bindEvents() {
   $('#btn-terminal').onclick = () => term.toggle();
   bindCodexControls();
   shotTray.init();
-  $('#term-newtab').onclick = () => term.newTab();
+  $('#term-newtab').onclick = () => term.newTerminal();
   $('#term-max').onclick = () => term.toggleMax();
   const termTabs = $('#term-tabs');
   termTabs.addEventListener('wheel', (ev) => {

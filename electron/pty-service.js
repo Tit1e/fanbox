@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 node-pty、Node.js 文件/进程能力与 ipc-validation.js 安全契约
- * [OUTPUT]: 对外提供 createPtyService，统一管理终端创建、输入、尺寸、目录查询和销毁
+ * [OUTPUT]: 对外提供 createPtyService，统一管理终端创建、输入、尺寸、目录、前台进程查询和销毁
  * [POS]: electron 模块的终端领域服务，由 main.js 装配并被 IPC 处理器调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -9,7 +9,7 @@
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const { validPtyId, normalizeTerminalSize, validPtyInput, validDirectory } = require('./ipc-validation');
 
 function decodeLsofPath(value) {
@@ -35,7 +35,22 @@ function termCwdByPid(pid, run = exec) {
   });
 }
 
-function createPtyService({ pty, send = () => {}, onCountChange = () => {} }) {
+function foregroundProcessByPid(pid, run = execFile) {
+  return new Promise((resolve) => {
+    if (!pid || process.platform === 'win32') return resolve({ ok: false, running: false });
+    run('/bin/ps', ['-o', 'pgid=', '-o', 'tpgid=', '-p', String(pid)], { timeout: 3000 }, (err, stdout) => {
+      if (err) return resolve({ ok: false, running: false });
+      const values = String(stdout || '').trim().split(/\s+/).map(Number);
+      const [shellGroup, foregroundGroup] = values;
+      if (!Number.isInteger(shellGroup) || !Number.isInteger(foregroundGroup) || foregroundGroup <= 0) {
+        return resolve({ ok: false, running: false });
+      }
+      resolve({ ok: true, running: foregroundGroup !== shellGroup });
+    });
+  });
+}
+
+function createPtyService({ pty, send = () => {}, onCountChange = () => {}, foregroundProcess = foregroundProcessByPid }) {
   const terminals = new Map();
   const notifyCount = () => onCountChange(terminals.size);
 
@@ -99,13 +114,20 @@ function createPtyService({ pty, send = () => {}, onCountChange = () => {} }) {
     return value ? { ok: true, cwd: value } : { ok: false };
   }
 
+  async function hasForegroundProcess({ id }) {
+    if (!validPtyId(id)) return { ok: false, running: false };
+    const terminal = terminals.get(id);
+    if (!terminal || !terminal.pid) return { ok: false, running: false };
+    return foregroundProcess(terminal.pid);
+  }
+
   function killAll() {
     terminals.forEach((terminal) => { try { terminal.kill(); } catch { /* */ } });
     terminals.clear();
     notifyCount();
   }
 
-  return { spawn, input, resize, kill, cwd, killAll, count: () => terminals.size };
+  return { spawn, input, resize, kill, cwd, hasForegroundProcess, killAll, count: () => terminals.size };
 }
 
-module.exports = { createPtyService, decodeLsofPath, termCwdByPid };
+module.exports = { createPtyService, decodeLsofPath, termCwdByPid, foregroundProcessByPid };

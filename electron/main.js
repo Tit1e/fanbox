@@ -472,6 +472,7 @@ ipcMain.on('pty:input', (event, payload) => ptyService.input(payload));
 ipcMain.on('pty:resize', (event, payload) => ptyService.resize(payload));
 ipcMain.on('pty:kill', (event, payload) => ptyService.kill(payload));
 ipcMain.handle('pty:cwd', (event, payload) => ptyService.cwd(payload));
+ipcMain.handle('pty:has-foreground-process', (event, payload) => ptyService.hasForegroundProcess(payload));
 ipcMain.handle('clip:image', (event, payload) => systemFileService.copyImage(payload));
 ipcMain.handle('clip:file', (event, payload) => systemFileService.copyFile(payload));
 ipcMain.handle('drop:save', (event, payload) => systemFileService.save(payload));
