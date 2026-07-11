@@ -42,13 +42,21 @@
 #topbar.tb-xxs #view-seg { display: none; }
 #topbar.tb-min #sort-seg { display: none; }
 .toggle { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; cursor: pointer; }
-.seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg { display: flex; }
 .seg button {
-  border: none; background: var(--bg-3); color: var(--text-dim); padding: 5px 10px;
-  cursor: pointer; font-size: 12px; border-right: 1px solid var(--border);
+  flex: 0 0 auto; box-sizing: border-box; height: 30px;
+  border: 1px solid var(--border); border-radius: 0;
+  background: var(--bg-3); color: var(--text-dim); padding: 0 10px;
+  cursor: pointer; font-size: 12px;
 }
-.seg button:last-child { border-right: none; }
-.seg button.active { background: var(--accent); color: var(--accent-ink); }
+.seg button + button { margin-left: -1px; }
+.seg button:first-child { border-radius: 7px 0 0 7px; }
+.seg button:last-child { border-radius: 0 7px 7px 0; }
+.topbar-actions #sort-seg button { width: 50px; }
+.topbar-actions #view-seg button,
+.topbar-actions #gridsize-seg button { width: 34px; padding: 0; }
+.seg button:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
+.seg button.active { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
 .ghost-btn {
   display: inline-flex; align-items: center; gap: 5px;
   border: 1px solid var(--border); background: var(--bg-3); color: var(--text-dim);
