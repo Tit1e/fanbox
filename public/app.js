@@ -328,4 +328,5 @@ startApplication({
   bindSelectionToTerminal, enableTooltips, loadRoots, loadFavorites, loadCodexProjects,
   navigate, maybeShowGuide, escapeHtml, toast,
   recoveryDialog,
+  refreshGitStatus: (...args) => gitPanel?.refresh(...args),
 });

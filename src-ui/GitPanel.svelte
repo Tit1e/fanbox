@@ -1,6 +1,6 @@
 <!--
   [INPUT]: 依赖 Svelte 5 响应式状态、Git 状态数据、Git 图标与文件选择回调
-  [OUTPUT]: 对外提供 GitPanel 组件、body portal 弹层，以及 update/open/close 命令式边界
+  [OUTPUT]: 对外提供常驻分支名、按需变更汇总、body portal 弹层和 update/open/close 边界
   [POS]: src-ui 的首个渐进式界面岛，负责 Git 状态汇总和变更文件弹层渲染
   [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 -->
@@ -83,9 +83,12 @@
     onclick={toggle}
   >
     {@html icon}
-    <span>{data.branch || 'HEAD'} · {data.summary.files} 个文件</span>
-    <b>+{data.summary.additions}</b>
-    <i>−{data.summary.deletions}</i>
+    <span class="git-branch-name">{data.branch || 'HEAD'}</span>
+    {#if data.summary.files > 0}
+      <span class="git-file-count">· {data.summary.files} 个文件</span>
+      <b>+{data.summary.additions}</b>
+      <i>−{data.summary.deletions}</i>
+    {/if}
   </button>
 
   <div
@@ -97,7 +100,7 @@
   >
     <div class="git-pop-head">
       <div><span class="git-branch">{data.branch || 'HEAD'}</span>{#if data.detached}<span class="git-detached">detached</span>{/if}</div>
-      <div class="git-total"><b>+{data.summary.additions}</b><i>−{data.summary.deletions}</i></div>
+      {#if data.summary.files > 0}<div class="git-total"><b>+{data.summary.additions}</b><i>−{data.summary.deletions}</i></div>{/if}
     </div>
     <div class="git-pop-list">
       {#each data.files || [] as file}

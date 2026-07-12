@@ -12,7 +12,7 @@ editor-guard.test.mjs: 自动保存、未保存确认、预览关闭与编辑器
 file-follow.test.mjs: 文件跟随启停、终端绑定与手动导航接管测试
 favorites-list.test.mjs: Svelte 收藏列表测试，覆盖空态、目录/文件渲染、活动高亮、预览与移除动作
 file-list.test.mjs: Svelte 主文件列表测试，覆盖网格/列表、选择、变更标记、收藏及交互转发
-git-panel.test.mjs: Svelte Git 状态栏汇总、非仓库提示、变更文件弹层与 Diff 跳转测试
+git-panel.test.mjs: Svelte Git 常驻分支、按需汇总、静默刷新并发保护、非仓库提示与 Diff 跳转测试
 navigation.test.mjs: 文件浏览排序过滤与命令面板导航测试
 release-panel.test.mjs: Svelte 发布向导测试，覆盖状态检查、版本递增、选项提交与终端启动
 roots-list.test.mjs: Svelte 快速入口测试，覆盖根目录渲染、活动高亮、目录展开与导航

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 happy-dom 与 public/generated/ui.mjs Svelte 构建产物
- * [OUTPUT]: 验证仓库汇总、非仓库提示、变更文件列表和 Diff 跳转
+ * [OUTPUT]: 验证常驻分支名、按需变更汇总、静默刷新并发保护、非仓库提示和 Diff 跳转
  * [POS]: tests/frontend 的 Git 状态栏与弹层交互回归测试
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -74,6 +74,44 @@ test('普通目录明确显示不是 Git 仓库', async () => {
     await panel.load('/tmp');
     assert.equal(document.querySelector('#git-status-slot').textContent, '当前目录不是 Git 仓库');
     assert.equal(document.querySelector('#git-summary'), null);
+  } finally {
+    dom.cleanup();
+  }
+});
+
+test('干净仓库始终显示分支但隐藏零值变更汇总', async () => {
+  const dom = installDom(`<style>${previewCss}</style><div id="git-status-slot"></div>`);
+  try {
+    const panel = await setup(async () => ({
+      available: true,
+      isRepo: true,
+      branch: 'master',
+      detached: false,
+      summary: { files: 0, additions: 0, deletions: 0, binary: 0 },
+      files: [],
+    }));
+    await panel.load('/repo');
+    assert.equal(document.querySelector('.git-branch-name').textContent, 'master');
+    assert.equal(document.querySelector('.git-file-count'), null);
+    assert.equal(document.querySelector('#git-summary b'), null);
+    assert.equal(document.querySelector('#git-summary i'), null);
+  } finally {
+    dom.cleanup();
+  }
+});
+
+test('同目录静默刷新未完成时不会发起重叠请求', async () => {
+  const dom = installDom('<div id="git-status-slot"></div>');
+  try {
+    let calls = 0;
+    let resolveRequest;
+    const pending = new Promise((resolve) => { resolveRequest = resolve; });
+    const panel = await setup(() => { calls++; return pending; });
+    const first = panel.refresh('/repo');
+    const second = panel.refresh('/repo');
+    assert.equal(calls, 1);
+    resolveRequest({ available: true, isRepo: false });
+    await Promise.all([first, second]);
   } finally {
     dom.cleanup();
   }

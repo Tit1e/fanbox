@@ -237,13 +237,15 @@
 .sb-links { display: flex; gap: 14px; }
 
 /* Git 状态：状态栏只放汇总，点击后在上方展开仓库级变更文件 */
-#git-status-slot { display: inline-flex; min-width: 0; }
+#git-status-slot { display: inline-flex; flex: none; min-width: 0; }
 .git-summary {
   display: inline-flex; align-items: center; gap: 4px; max-width: 310px;
   padding: 0; border: 0; background: none; color: var(--text-dim);
   font: inherit; cursor: pointer; white-space: nowrap;
 }
 .git-summary span { overflow: hidden; text-overflow: ellipsis; }
+.git-summary .git-branch-name { flex: 0 1 auto; min-width: 48px; }
+.git-summary .git-file-count { flex: none; }
 .git-summary b, .git-summary i { flex: none; font-family: var(--font-mono); font-weight: 600; }
 .git-summary b { color: var(--green); }
 .git-summary i { color: #e35d6a; font-style: normal; }

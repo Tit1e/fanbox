@@ -2,7 +2,7 @@
 > L2 | 父级: ../AGENTS.md
 
 ## 成员清单
-GitPanel.svelte: Svelte 5 Git 状态界面岛，声明式渲染分支汇总，并通过 body portal 定位增删行与变更文件弹层
+GitPanel.svelte: Svelte 5 Git 状态界面岛，常驻渲染分支名、按需显示变更汇总，并通过 body portal 定位文件弹层
 DialogHost.svelte: Svelte 5 通用弹窗宿主，串行处理输入、确认和终端恢复选择请求、键盘与焦点
 ContextMenu.svelte: Svelte 5 上下文菜单宿主，管理动作列表、视口定位、外部点击、窗口失焦与 Escape 关闭
 DiskPanel.svelte: Svelte 5 磁盘透视界面岛，管理异步加载、错误态、占用条和目录下钻
@@ -22,7 +22,7 @@ context-menu-service.js: 上下文菜单适配入口，向原生控制器保留 
 disk-panel-service.js: 磁盘透视适配入口，连接 du API、路径工具与 Svelte 组件
 release-panel-service.js: 发布向导适配入口，连接检查/准备 API、提示与终端命令执行
 dialog-service.js: 通用弹窗适配入口，向原生控制器暴露输入、确认和终端恢复 Promise 接口
-git-panel.js: Git 面板适配入口，连接现有 HTTP/Diff 领域能力与 Svelte 组件生命周期
+git-panel.js: Git 面板适配入口，连接 HTTP/Diff 能力与 Svelte 生命周期，提供静默刷新和同目录并发保护
 index.js: Svelte 界面统一构建入口，导出全部界面岛服务并共享运行时
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

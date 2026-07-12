@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 依赖全部已装配控制器、终端恢复选择弹窗、桌面桥接与共享 state
- * [OUTPUT]: 对外提供 startApplication，完成界面初始化、数据首载、终端恢复和更新提示绑定
+ * [INPUT]: 依赖全部已装配控制器、Git 静默刷新、终端恢复选择弹窗、桌面桥接与共享 state
+ * [OUTPUT]: 对外提供 startApplication，完成界面初始化、Git 五秒轮询、终端恢复和更新提示绑定
  * [POS]: public/modules 的应用生命周期模块，由 app.js 在完成依赖装配后调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function startApplication(deps) {
-  const { $, state, applyTheme, applyLayout, term, bindEvents, bindResizer, bindSidebarResizer, bindSelectionToTerminal, enableTooltips, loadRoots, loadFavorites, loadCodexProjects, navigate, maybeShowGuide, escapeHtml, toast, recoveryDialog } = deps;
+  const { $, state, applyTheme, applyLayout, term, bindEvents, bindResizer, bindSidebarResizer, bindSelectionToTerminal, enableTooltips, loadRoots, loadFavorites, loadCodexProjects, navigate, maybeShowGuide, escapeHtml, toast, recoveryDialog, refreshGitStatus } = deps;
 // ---------- 启动 ----------
 async function init() {
   // 桌面 app：标记 body，给顶部交通灯留位、顶部可拖拽
@@ -43,6 +43,7 @@ async function init() {
   loadCodexProjects();
   setInterval(loadCodexProjects, 60000); // 每分钟刷新项目与相对时间；服务端同样缓存 60s
   await navigate(state.home, false);
+  setInterval(() => { if (state.cwd) refreshGitStatus(state.cwd); }, 5000);
   if (window.codexboxRecovery && recoveryDialog) {
     try {
       const entries = await window.codexboxRecovery.list();
