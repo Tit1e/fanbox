@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Node.js 测试库与 electron/quit-service.js 的注入式退出守卫
- * [OUTPUT]: 验证无终端、空闲终端、运行任务、取消确认和重复退出请求
+ * [OUTPUT]: 验证无终端、空闲终端、运行任务快照保存、取消确认和重复退出请求
  * [POS]: tests/electron 的应用退出安全边界单元测试，不启动真实 Electron
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -66,6 +66,25 @@ test('确认退出后只发起一次新的退出事务', async () => {
   assert.equal(calls.dialog.length, 1);
   assert.equal(calls.quit, 1);
   assert.equal(guard.isQuitting(), true);
+});
+
+test('确认退出后保存仍在运行且已追踪到命令的任务', async () => {
+  const saved = [];
+  const guard = createQuitGuard({
+    app: { quit() {} },
+    dialog: { async showMessageBox() { return { response: 1 }; } },
+    ptyService: {
+      count: () => 2,
+      runningTaskSnapshots: async () => [
+        { cwd: '/tmp/a', command: 'codex' },
+        { cwd: '/tmp/b', command: '' },
+      ],
+    },
+    recoveryStore: { merge: (items) => saved.push(...items) },
+  });
+  guard.handleBeforeQuit(event());
+  await settle();
+  assert.deepEqual(saved, [{ cwd: '/tmp/a', command: 'codex' }]);
 });
 
 test('已确认有任务但确认框失败时不会静默退出', async () => {

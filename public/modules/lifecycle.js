@@ -1,11 +1,11 @@
 /**
- * [INPUT]: 依赖全部已装配控制器、桌面桥接与共享 state
- * [OUTPUT]: 对外提供 startApplication，完成界面初始化、数据首载和更新提示绑定
+ * [INPUT]: 依赖全部已装配控制器、终端恢复选择弹窗、桌面桥接与共享 state
+ * [OUTPUT]: 对外提供 startApplication，完成界面初始化、数据首载、终端恢复和更新提示绑定
  * [POS]: public/modules 的应用生命周期模块，由 app.js 在完成依赖装配后调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 export function startApplication(deps) {
-  const { $, state, applyTheme, applyLayout, term, bindEvents, bindResizer, bindSidebarResizer, bindSelectionToTerminal, enableTooltips, loadRoots, loadFavorites, loadCodexProjects, navigate, maybeShowGuide, escapeHtml, toast } = deps;
+  const { $, state, applyTheme, applyLayout, term, bindEvents, bindResizer, bindSidebarResizer, bindSelectionToTerminal, enableTooltips, loadRoots, loadFavorites, loadCodexProjects, navigate, maybeShowGuide, escapeHtml, toast, recoveryDialog } = deps;
 // ---------- 启动 ----------
 async function init() {
   // 桌面 app：标记 body，给顶部交通灯留位、顶部可拖拽
@@ -43,6 +43,20 @@ async function init() {
   loadCodexProjects();
   setInterval(loadCodexProjects, 60000); // 每分钟刷新项目与相对时间；服务端同样缓存 60s
   await navigate(state.home, false);
+  if (window.codexboxRecovery && recoveryDialog) {
+    try {
+      const entries = await window.codexboxRecovery.list();
+      if (entries.length) {
+        const decision = await recoveryDialog(entries);
+        if (decision?.action === 'clear') await window.codexboxRecovery.clear();
+        else if (decision?.action === 'restore' && decision.ids.length) {
+          const selected = await window.codexboxRecovery.take(decision.ids);
+          const restored = await term.restoreCommands(selected);
+          toast(restored ? `已恢复 ${restored} 个终端任务` : '没有可恢复的终端任务', !restored);
+        }
+      }
+    } catch { toast('读取终端恢复记录失败', true); }
+  }
   // 恢复上次终端开合状态（dock 方位已由 applyDock 自带记忆）
   if (localStorage.getItem('codexbox_term_open') === '1' && term.available()) term.open();
   maybeShowGuide();

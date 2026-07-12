@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Node.js 测试库与 electron/pty-service.js 的注入式终端服务
- * [OUTPUT]: 验证 PTY 生命周期、事件转发、重复 ID、输入尺寸、前台进程与运行任务统计
+ * [OUTPUT]: 验证 PTY 生命周期、事件转发、顶层命令标记、前台进程与运行任务快照
  * [POS]: tests/electron 的终端领域服务单元测试，不启动 Electron 或真实 shell
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -80,6 +80,25 @@ test('运行任务统计只计算确认存在前台进程的终端', async () =>
   assert.equal(await service.countRunningTasks(), 1);
   service.killAll();
   assert.equal(await service.countRunningTasks(), 0);
+});
+
+test('运行任务快照包含 Shell 集成捕获的原始顶层命令', async () => {
+  let terminal;
+  const pty = { spawn() {
+    terminal = { pid: 71, write() {}, resize() {}, kill() {}, onData(handler) { this.dataHandler = handler; }, onExit() {} };
+    return terminal;
+  } };
+  const service = createPtyService({
+    pty,
+    foregroundProcess: async () => ({ ok: true, running: true }),
+    cwdLookup: async () => '/tmp/codexbox-project',
+  });
+  service.spawn({ id: 'tracked', cwd: process.cwd() });
+  const encoded = Buffer.from('npm run dev').toString('base64');
+  terminal.dataHandler(`\x1b]777;codexbox;start;${encoded}\x07`);
+  assert.deepEqual(await service.runningTaskSnapshots(), [{ running: true, cwd: '/tmp/codexbox-project', command: 'npm run dev', title: 'codexbox-project' }]);
+  terminal.dataHandler('\x1b]777;codexbox;end\x07');
+  assert.equal((await service.runningTaskSnapshots())[0].command, '');
 });
 
 test('前台进程组区别于 Shell 进程组时识别为运行中', async () => {

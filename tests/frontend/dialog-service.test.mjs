@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 happy-dom 与 public/generated/ui.mjs 中的 Svelte 通用弹窗服务
- * [OUTPUT]: 验证输入、确认、键盘操作、焦点和并发请求串行行为
+ * [OUTPUT]: 验证输入、确认、终端恢复选择、键盘操作、焦点和请求串行行为
  * [POS]: tests/frontend 的 Svelte DialogHost 回归测试，保护所有文件与终端确认流程
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -60,5 +60,33 @@ test('并发弹窗请求串行展示且分别完成', async () => {
     assert.equal(document.querySelector('.input-title').textContent, '第二个');
     document.querySelector('.ghost-btn').click();
     assert.equal(await second, null);
+  } finally { dom.cleanup(); }
+});
+
+test('终端恢复弹窗默认选择有效目录并支持选择性恢复', async () => {
+  const dom = installDom();
+  try {
+    const dialogs = await setup();
+    const result = dialogs.recoveryDialog([
+      { id: 'a', command: 'codex', cwd: '/tmp/a', available: true },
+      { id: 'b', command: 'npm run dev', cwd: '/missing', available: false },
+    ]);
+    await settle();
+    const checks = [...document.querySelectorAll('.recovery-list input')];
+    assert.equal(checks[0].checked, true);
+    assert.equal(checks[1].disabled, true);
+    document.querySelector('.recovery-actions .ghost-btn:not(.danger)').click();
+    assert.deepEqual(await result, { action: 'restore', ids: ['a'] });
+  } finally { dom.cleanup(); }
+});
+
+test('关闭终端恢复弹窗会保留记录而不是清除', async () => {
+  const dom = installDom();
+  try {
+    const dialogs = await setup();
+    const result = dialogs.recoveryDialog([{ id: 'a', command: 'codex', cwd: '/tmp/a', available: true }]);
+    await settle();
+    window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    assert.equal(await result, null);
   } finally { dom.cleanup(); }
 });

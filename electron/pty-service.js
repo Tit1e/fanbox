@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 node-pty、Node.js 文件/进程能力与 ipc-validation.js 安全契约
- * [OUTPUT]: 对外提供 createPtyService，统一管理终端创建、输入、尺寸、目录、前台进程查询、运行任务统计和销毁
+ * [INPUT]: 依赖 node-pty、Node.js 文件/进程能力、shell-integration.js 与 ipc-validation.js 安全契约
+ * [OUTPUT]: 对外提供 createPtyService，统一管理终端、顶层命令追踪、运行任务快照和销毁
  * [POS]: electron 模块的终端领域服务，由 main.js 装配并被 IPC 处理器调用
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -11,6 +11,7 @@ const os = require('os');
 const fs = require('fs');
 const { exec, execFile } = require('child_process');
 const { validPtyId, normalizeTerminalSize, validPtyInput, validDirectory } = require('./ipc-validation');
+const { consumeShellMarkers } = require('./shell-integration');
 
 function decodeLsofPath(value) {
   if (!/\\x[0-9a-fA-F]{2}/.test(value)) return value;
@@ -50,7 +51,7 @@ function foregroundProcessByPid(pid, run = execFile) {
   });
 }
 
-function createPtyService({ pty, send = () => {}, onCountChange = () => {}, foregroundProcess = foregroundProcessByPid }) {
+function createPtyService({ pty, send = () => {}, onCountChange = () => {}, foregroundProcess = foregroundProcessByPid, cwdLookup = termCwdByPid, zshIntegration = null }) {
   const terminals = new Map();
   const notifyCount = () => onCountChange(terminals.size);
 
@@ -62,6 +63,10 @@ function createPtyService({ pty, send = () => {}, onCountChange = () => {}, fore
     const startCwd = validDirectory(cwd, fs) ? path.resolve(cwd) : os.homedir();
     const size = normalizeTerminalSize(cols, rows);
     const env = { ...process.env, TERM: 'xterm-256color', CODEXBOX: '1' };
+    if (zshIntegration && path.basename(shellPath) === 'zsh') {
+      env.ZDOTDIR = zshIntegration.dir;
+      env.CODEXBOX_ORIGINAL_ZDOTDIR = zshIntegration.originalZdotdir;
+    }
     delete env.CODEXBOX_PORT;
     delete env.CODEXBOX_DEV_PORT;
     delete env.CODEXBOX_NO_OPEN;
@@ -72,9 +77,15 @@ function createPtyService({ pty, send = () => {}, onCountChange = () => {}, fore
         name: 'xterm-256color', cols: size.cols, rows: size.rows, cwd: startCwd, env,
       });
     } catch (err) { return { ok: false, error: err.message }; }
-    terminals.set(id, terminal);
+    const record = { terminal, startCwd, command: '', markerState: { carry: '' } };
+    terminals.set(id, record);
     notifyCount();
-    terminal.onData((data) => send('pty:data', { id, data }));
+    terminal.onData((data) => {
+      const visible = consumeShellMarkers(record.markerState, data, (marker) => {
+        record.command = marker.type === 'start' && !/^\s/.test(marker.command) ? marker.command : '';
+      });
+      if (visible) send('pty:data', { id, data: visible });
+    });
     terminal.onExit(({ exitCode }) => {
       terminals.delete(id);
       notifyCount();
@@ -85,44 +96,44 @@ function createPtyService({ pty, send = () => {}, onCountChange = () => {}, fore
 
   function input({ id, data }) {
     if (!validPtyId(id) || !validPtyInput(data)) return;
-    const terminal = terminals.get(id);
-    if (terminal) terminal.write(data);
+    const record = terminals.get(id);
+    if (record) record.terminal.write(data);
   }
 
   function resize({ id, cols, rows }) {
     if (!validPtyId(id)) return;
-    const terminal = terminals.get(id);
-    if (!terminal) return;
+    const record = terminals.get(id);
+    if (!record) return;
     const size = normalizeTerminalSize(cols, rows);
-    try { terminal.resize(size.cols, size.rows); } catch { /* 终端可能刚退出 */ }
+    try { record.terminal.resize(size.cols, size.rows); } catch { /* 终端可能刚退出 */ }
   }
 
   function kill({ id }) {
     if (!validPtyId(id)) return;
-    const terminal = terminals.get(id);
-    if (!terminal) return;
-    try { terminal.kill(); } catch { /* 终端可能刚退出 */ }
+    const record = terminals.get(id);
+    if (!record) return;
+    try { record.terminal.kill(); } catch { /* 终端可能刚退出 */ }
     terminals.delete(id);
     notifyCount();
   }
 
   async function cwd({ id }) {
     if (!validPtyId(id)) return { ok: false };
-    const terminal = terminals.get(id);
-    if (!terminal || !terminal.pid) return { ok: false };
-    const value = await termCwdByPid(terminal.pid);
+    const record = terminals.get(id);
+    if (!record || !record.terminal.pid) return { ok: false };
+    const value = await cwdLookup(record.terminal.pid);
     return value ? { ok: true, cwd: value } : { ok: false };
   }
 
   async function hasForegroundProcess({ id }) {
     if (!validPtyId(id)) return { ok: false, running: false };
-    const terminal = terminals.get(id);
-    if (!terminal || !terminal.pid) return { ok: false, running: false };
-    return foregroundProcess(terminal.pid);
+    const record = terminals.get(id);
+    if (!record || !record.terminal.pid) return { ok: false, running: false };
+    return foregroundProcess(record.terminal.pid);
   }
 
   async function countRunningTasks() {
-    const checks = [...terminals.values()].map(async (terminal) => {
+    const checks = [...terminals.values()].map(async ({ terminal }) => {
       if (!terminal.pid) return false;
       try {
         const result = await foregroundProcess(terminal.pid);
@@ -133,13 +144,26 @@ function createPtyService({ pty, send = () => {}, onCountChange = () => {}, fore
     return results.filter(Boolean).length;
   }
 
+  async function runningTaskSnapshots() {
+    const snapshots = await Promise.all([...terminals.values()].map(async (record) => {
+      if (!record.terminal.pid) return null;
+      try {
+        const result = await foregroundProcess(record.terminal.pid);
+        if (!result.ok || !result.running) return null;
+        const cwdValue = await cwdLookup(record.terminal.pid);
+        return { running: true, cwd: cwdValue || record.startCwd, command: record.command, title: path.basename(cwdValue || record.startCwd) || 'shell' };
+      } catch { return null; }
+    }));
+    return snapshots.filter(Boolean);
+  }
+
   function killAll() {
-    terminals.forEach((terminal) => { try { terminal.kill(); } catch { /* */ } });
+    terminals.forEach(({ terminal }) => { try { terminal.kill(); } catch { /* */ } });
     terminals.clear();
     notifyCount();
   }
 
-  return { spawn, input, resize, kill, cwd, hasForegroundProcess, countRunningTasks, killAll, count: () => terminals.size };
+  return { spawn, input, resize, kill, cwd, hasForegroundProcess, countRunningTasks, runningTaskSnapshots, killAll, count: () => terminals.size };
 }
 
 module.exports = { createPtyService, decodeLsofPath, termCwdByPid, foregroundProcessByPid };

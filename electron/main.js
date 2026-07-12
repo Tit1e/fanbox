@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 Electron 窗口/菜单/IPC 能力、PTY/退出等领域服务、../server.js 本地服务与 ../port-config.js 端口配置
- * [OUTPUT]: 对外提供 CodexBox 桌面主进程、PTY 与文件/剪贴板/更新 IPC、原生菜单和窗口生命周期
+ * [INPUT]: 依赖 Electron 窗口/菜单/IPC 能力、PTY/Shell 集成/恢复/退出等领域服务、../server.js 与端口配置
+ * [OUTPUT]: 对外提供 CodexBox 桌面主进程、PTY/恢复与文件/剪贴板/更新 IPC、菜单和窗口生命周期
  * [POS]: electron 模块的主进程编排器，与 preload.js 协作连接渲染层、本地服务和操作系统
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -18,6 +18,8 @@ const { createFileWatchService } = require('./file-watch-service');
 const { createSystemFileService } = require('./system-file-service');
 const { createLidGuard } = require('./power-service');
 const { createQuitGuard } = require('./quit-service');
+const { createZshIntegration } = require('./shell-integration');
+const { createTerminalRecoveryStore } = require('./terminal-recovery-store');
 
 const APP_NAME = 'CodexBox';
 app.setName(APP_NAME);
@@ -46,7 +48,9 @@ const lidGuard = createLidGuard({
   persist: (value) => writeConfig({ lidStayAwake: value }),
   onChange: () => buildMenu(),
 });
-const ptyService = createPtyService({ pty, send, onCountChange: (count) => { terminalCount = count; lidGuard.refresh(count); } });
+const zshIntegration = createZshIntegration(app.getPath('userData'));
+const recoveryStore = createTerminalRecoveryStore(app.getPath('userData'));
+const ptyService = createPtyService({ pty, send, zshIntegration, onCountChange: (count) => { terminalCount = count; lidGuard.refresh(count); } });
 const watchService = createFileWatchService({ send });
 const systemFileService = createSystemFileService({ app, nativeImage, clipboard });
 
@@ -439,7 +443,7 @@ app.on('activate', () => {
   else if (win && !win.isDestroyed()) { win.show(); win.focus(); } // 从 Dock 点回来：显示隐藏的窗口，状态原样还在
 });
 // ⌘Q 只保护确实存在前台任务的终端；空闲 Shell 不阻止退出。
-const quitGuard = createQuitGuard({ app, dialog, ptyService, getWindow: () => win, translate: M });
+const quitGuard = createQuitGuard({ app, dialog, ptyService, recoveryStore, getWindow: () => win, translate: M });
 app.on('before-quit', (event) => quitGuard.handleBeforeQuit(event));
 app.on('window-all-closed', () => {
   ptyService.killAll();
@@ -457,6 +461,9 @@ ipcMain.on('pty:resize', (event, payload) => ptyService.resize(payload));
 ipcMain.on('pty:kill', (event, payload) => ptyService.kill(payload));
 ipcMain.handle('pty:cwd', (event, payload) => ptyService.cwd(payload));
 ipcMain.handle('pty:has-foreground-process', (event, payload) => ptyService.hasForegroundProcess(payload));
+ipcMain.handle('terminal-recovery:list', () => recoveryStore.list());
+ipcMain.handle('terminal-recovery:take', (event, payload) => recoveryStore.take(payload && payload.ids));
+ipcMain.handle('terminal-recovery:clear', () => { recoveryStore.clear(); return { ok: true }; });
 ipcMain.handle('clip:image', (event, payload) => systemFileService.copyImage(payload));
 ipcMain.handle('clip:file', (event, payload) => systemFileService.copyFile(payload));
 ipcMain.handle('drop:save', (event, payload) => systemFileService.save(payload));

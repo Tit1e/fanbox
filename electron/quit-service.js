@@ -1,12 +1,12 @@
 /**
- * [INPUT]: 依赖 Electron app/dialog、PTY 真实运行任务统计、窗口获取与双语文案函数
- * [OUTPUT]: 对外提供 createQuitGuard，管理异步退出检查、确认和重复请求去重
+ * [INPUT]: 依赖 Electron app/dialog、PTY 真实运行任务快照、终端恢复仓储、窗口获取与双语文案函数
+ * [OUTPUT]: 对外提供 createQuitGuard，管理退出检查、确认、恢复快照保存和重复请求去重
  * [POS]: electron 模块的应用退出安全边界，被 main.js 的窗口关闭与 before-quit 生命周期消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 'use strict';
 
-function createQuitGuard({ app, dialog, ptyService, getWindow = () => null, translate = (zh) => zh }) {
+function createQuitGuard({ app, dialog, ptyService, recoveryStore = null, getWindow = () => null, translate = (zh) => zh }) {
   let quitting = false;
   let checking = false;
 
@@ -22,7 +22,10 @@ function createQuitGuard({ app, dialog, ptyService, getWindow = () => null, tran
     if (checking) return;
     checking = true;
 
-    ptyService.countRunningTasks().then(async (runningTasks) => {
+    const inspect = ptyService.runningTaskSnapshots
+      ? ptyService.runningTaskSnapshots().then((tasks) => ({ runningTasks: tasks.length, tasks }))
+      : ptyService.countRunningTasks().then((runningTasks) => ({ runningTasks, tasks: [] }));
+    inspect.then(async ({ runningTasks, tasks }) => {
       if (runningTasks === 0) { quit(); return; }
       try {
         const win = getWindow();
@@ -34,7 +37,10 @@ function createQuitGuard({ app, dialog, ptyService, getWindow = () => null, tran
           message: translate(`还有 ${runningTasks} 个终端任务正在运行`, `${runningTasks} terminal task(s) still running`),
           detail: translate('退出会终止正在运行的任务，确定退出？', 'Quitting will terminate running tasks. Quit anyway?'),
         });
-        if (response === 1) quit();
+        if (response === 1) {
+          if (recoveryStore && tasks.length) recoveryStore.merge(tasks.filter((task) => task.command));
+          quit();
+        }
       } catch { /* 确认框失败时留在应用内，不能静默终止已确认运行的任务。 */ }
     }).catch(() => {
       // 无法确认有任务运行时不阻止退出，符合“只保护确实运行的任务”的规则。

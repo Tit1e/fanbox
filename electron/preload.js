@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Electron 的 contextBridge、ipcRenderer 和 webUtils 受控系统能力
- * [OUTPUT]: 对外提供 codexboxPty、codexboxFs、codexboxClipboard、codexboxDrop、codexboxShot、codexboxUpdate、codexboxWin 与 codexboxEnv，含新建终端、启动 Codex 和关闭活动终端事件
+ * [OUTPUT]: 对外提供 PTY、终端恢复、文件、剪贴板、更新、窗口与环境受控桥接
  * [POS]: electron 模块的安全桥接层，在 contextIsolation 下连接渲染进程与主进程 IPC
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -16,6 +16,12 @@ contextBridge.exposeInMainWorld('codexboxPty', {
   hasForegroundProcess: (id) => ipcRenderer.invoke('pty:has-foreground-process', { id }),
   onData: (cb) => { const h = (e, m) => cb(m); ipcRenderer.on('pty:data', h); return () => ipcRenderer.removeListener('pty:data', h); },
   onExit: (cb) => { const h = (e, m) => cb(m); ipcRenderer.on('pty:exit', h); return () => ipcRenderer.removeListener('pty:exit', h); },
+});
+
+contextBridge.exposeInMainWorld('codexboxRecovery', {
+  list: () => ipcRenderer.invoke('terminal-recovery:list'),
+  take: (ids) => ipcRenderer.invoke('terminal-recovery:take', { ids }),
+  clear: () => ipcRenderer.invoke('terminal-recovery:clear'),
 });
 
 contextBridge.exposeInMainWorld('codexboxFs', {

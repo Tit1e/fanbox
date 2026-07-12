@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 Electron PTY 桥、xterm 浏览器资源、共享 state/follow 与文件导航回调
- * [OUTPUT]: 对外提供 createTerminalController，管理多终端标签、Codex 状态、拖放和终端布局
+ * [INPUT]: 依赖 Electron PTY/恢复桥、xterm 浏览器资源、共享 state/follow 与文件导航回调
+ * [OUTPUT]: 对外提供 createTerminalController，管理多终端标签、命令恢复、Codex 状态、拖放和布局
  * [POS]: public/modules 的终端领域控制器，被应用事件层和文件跟随模块消费
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -125,6 +125,24 @@ const term = {
     const sess = await this.openInDir(dir);
     if (sess && !sess.dead) { this.input(sess.id, cmd + '\r'); sess.xterm.focus(); toast(msg || '已在终端启动'); }
     else toast('终端启动失败', true);
+  },
+  // 恢复记录已经在主进程中一次性取出；逐条创建终端并执行，单条失败不阻断其余任务。
+  async restoreCommands(entries) {
+    if (!this.available() || !Array.isArray(entries) || !entries.length) return 0;
+    $('#terminal-panel').classList.remove('hidden');
+    $('#terminal-resizer').classList.remove('hidden');
+    $('#btn-terminal').classList.add('active');
+    localStorage.setItem('codexbox_term_open', '1');
+    this.applyDock();
+    let restored = 0;
+    for (const entry of entries) {
+      const sess = await this.newTab(entry.cwd);
+      if (!sess || sess.dead) continue;
+      this.input(sess.id, entry.command + '\r');
+      restored++;
+    }
+    if (restored) this.sessions.find((item) => item.id === this.active)?.xterm.focus();
+    return restored;
   },
   // 把预览里选中的文字作为「上下文」喂给终端 agent：带文件出处 + 围栏，bracketed paste 防逐行误提交
   sendContext(text, srcPath) {

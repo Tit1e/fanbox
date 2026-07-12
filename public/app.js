@@ -1,6 +1,6 @@
 /**
- * [INPUT]: 依赖 index.html DOM、generated/ui.mjs Svelte 界面岛、i18n.js、服务端 HTTP/Git API、xterm/Monaco/Milkdown 浏览器全局对象和 Electron preload 桥接
- * [OUTPUT]: 对外提供 CodexBox 文件管理、Git 变更查看、预览编辑、内嵌终端、Codex 项目会话操作、文件跟随和全局交互
+ * [INPUT]: 依赖 index.html DOM、generated/ui.mjs Svelte 界面岛、HTTP/Git API、xterm/Monaco/Milkdown 和 Electron PTY/恢复桥
+ * [OUTPUT]: 对外提供文件管理、Git 查看、预览编辑、内嵌终端及选择性命令恢复、Codex 会话和全局交互
  * [POS]: public 模块的渲染层主入口，集中编排页面状态、视图和桌面能力
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -144,6 +144,7 @@ let undoImage;
 let setFileFollow, rememberFollowChange, followChange;
 const { isNoisyChange, kindFromName, rippleFileArea, playChime } = createEffects(state, $);
 const dialogService = createDialogService();
+const { recoveryDialog } = dialogService;
 const contextMenuService = createContextMenuService();
 const segmentedControlService = createSegmentedControlService();
 const diskPanelService = createDiskPanelService({ api, formatSize: fmtSize, parentOf: dirOf, separatorOf: () => state.sep, homeOf: () => state.home });
@@ -326,4 +327,5 @@ startApplication({
   $, state, applyTheme, applyLayout, term, bindEvents, bindResizer, bindSidebarResizer,
   bindSelectionToTerminal, enableTooltips, loadRoots, loadFavorites, loadCodexProjects,
   navigate, maybeShowGuide, escapeHtml, toast,
+  recoveryDialog,
 });
