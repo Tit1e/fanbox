@@ -17,11 +17,14 @@
 
 ## [Unreleased]
 
+## [2.6.14] - 2026-07-14
+
 ### Added
 - **重新运行当前终端命令快捷键**：按 `⌘⇧R` 先向当前标签的前台任务发送 `Ctrl+C`，确认 Shell 已恢复后重新执行原命令；没有运行任务、重复触发或 8 秒内未停止时不会启动第二份进程。
 
 ### Fixed
 - **CodexBox 终端内启动开发环境出现 zsh 递归报错**：嵌套启动时优先继承真实的 `CODEXBOX_ORIGINAL_ZDOTDIR`，并阻止集成目录 source 自身，不再出现 `job table full or recursion limit exceeded`。
+
 
 ## [2.6.13] - 2026-07-14
 
