@@ -257,6 +257,10 @@ CodexBox 的核心能力来自这些出色的开源项目：
 
 CodexBox's core capabilities come from these excellent open-source projects:
 
+CodexBox 基于 [alchaincyf/fanbox](https://github.com/alchaincyf/fanbox) 修改而来，感谢原作者花叔开源 FanBox 的基础工作。本 fork 由 Tit1e 维护，继续沿用 MIT 许可；原项目与本项目的版权声明见 [LICENSE](LICENSE)。
+
+CodexBox is based on [alchaincyf/fanbox](https://github.com/alchaincyf/fanbox). Thanks to the original author, Huashu, for open-sourcing the FanBox foundation. This fork is maintained by Tit1e and stays under MIT; see [LICENSE](LICENSE) for both copyright notices.
+
 | 项目 / Project | 用在哪 / Used for | License |
 |---|---|---|
 | [Electron](https://www.electronjs.org/) | 桌面壳，让零依赖 Node 后端长出真实终端和原生能力<br>The desktop shell that gives a zero-dependency Node backend a real terminal and native powers | MIT |

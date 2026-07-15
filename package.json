@@ -86,5 +86,6 @@
     "node-gyp": "^12.4.0",
     "svelte": "^5.56.4"
   },
+  "author": "Tit1e",
   "license": "MIT"
 }
