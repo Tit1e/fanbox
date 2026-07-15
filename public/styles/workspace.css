@@ -12,9 +12,11 @@
 }
 .nav-buttons { display: flex; gap: 4px; }
 .nav-buttons button {
-  width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--border);
-  background: var(--bg-3); color: var(--text-dim); cursor: pointer; font-size: 15px;
+  display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0;
+  border-radius: 7px; border: 1px solid var(--border);
+  background: var(--bg-3); color: var(--text-dim); cursor: pointer; font-size: 15px; line-height: 1;
 }
+.nav-buttons button svg { display: block; flex: 0 0 auto; }
 .nav-buttons button:hover { color: var(--text); border-color: var(--accent); }
 .nav-buttons button:disabled { opacity: 0.3; cursor: default; }
 
