@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 const GLOBAL_KEYS = [
   'window', 'document', 'navigator', 'localStorage', 'location', 'Image', 'HTMLImageElement', 'HTMLMediaElement',
   'Element', 'HTMLElement', 'Node', 'Text', 'Comment', 'DocumentFragment', 'Event', 'MouseEvent', 'CustomEvent',
-  'CSS', 'ResizeObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle',
+  'CSS', 'ResizeObserver', 'MutationObserver', 'requestAnimationFrame', 'cancelAnimationFrame', 'getComputedStyle',
 ];
 
 export function installDom(body = '') {
@@ -37,6 +37,7 @@ export function installDom(body = '') {
     CustomEvent: window.CustomEvent,
     CSS: window.CSS,
     ResizeObserver: window.ResizeObserver,
+    MutationObserver: window.MutationObserver,
     requestAnimationFrame: window.requestAnimationFrame.bind(window),
     cancelAnimationFrame: window.cancelAnimationFrame.bind(window),
     getComputedStyle: window.getComputedStyle.bind(window),

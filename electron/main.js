@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Electron 窗口/菜单/IPC 能力、PTY/Shell 集成/恢复/退出/开发刷新等领域服务、../server.js 与端口配置
- * [OUTPUT]: 对外提供 CodexBox 桌面主进程、PTY/恢复与文件/剪贴板/更新 IPC、Codex 新会话与命令重启快捷键、开发热重载、菜单和窗口生命周期
+ * [OUTPUT]: 对外提供 CodexBox 桌面主进程、PTY/恢复与文件/剪贴板/更新/菜单语言 IPC、Codex 新会话与命令重启快捷键、开发热重载、菜单和窗口生命周期
  * [POS]: electron 模块的主进程编排器，与 preload.js 和开发监督脚本协作连接渲染层、本地服务和操作系统
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -455,6 +455,11 @@ function buildMenu() {
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
+// 渲染层持久化语言配置成功后重建原生菜单；不重载窗口，PTY 会话保持不变。
+ipcMain.handle('locale:refresh-menu', () => {
+  buildMenu();
+  return { ok: true };
+});
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
   else if (win && !win.isDestroyed()) { win.show(); win.focus(); } // 从 Dock 点回来：显示隐藏的窗口，状态原样还在

@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 Electron 的 contextBridge、ipcRenderer 和 webUtils 受控系统能力
- * [OUTPUT]: 对外提供 PTY、终端恢复、Codex 启动与命令重启快捷键、文件、剪贴板、更新、窗口与环境受控桥接
+ * [OUTPUT]: 对外提供 PTY、终端恢复、Codex 启动与命令重启快捷键、文件、剪贴板、更新、窗口、菜单语言与环境受控桥接
  * [POS]: electron 模块的安全桥接层，在 contextIsolation 下连接渲染进程与主进程 IPC
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -68,6 +68,10 @@ contextBridge.exposeInMainWorld('codexboxWin', {
   onLaunchNewCodex: (cb) => { const h = () => cb(); ipcRenderer.on('terminal:launch-codex-new', h); return () => ipcRenderer.removeListener('terminal:launch-codex-new', h); },
   onRestartActiveCommand: (cb) => { const h = () => cb(); ipcRenderer.on('terminal:restart-active', h); return () => ipcRenderer.removeListener('terminal:restart-active', h); },
   onCloseActiveTerminal: (cb) => { const h = () => cb(); ipcRenderer.on('terminal:close-active', h); return () => ipcRenderer.removeListener('terminal:close-active', h); },
+});
+
+contextBridge.exposeInMainWorld('codexboxLocale', {
+  refreshMenu: () => ipcRenderer.invoke('locale:refresh-menu'),
 });
 
 contextBridge.exposeInMainWorld('codexboxEnv', {

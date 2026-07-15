@@ -1,100 +1,156 @@
 /**
- * [INPUT]: 依赖 i18n-dict.js 词典、index.html 语言开关 DOM、localStorage 和语言配置 HTTP API
+ * [INPUT]: 依赖 i18n-dict.js 词典、index.html 语言开关 DOM、localStorage、语言配置 HTTP API 和 Electron 菜单桥接
  * [OUTPUT]: 对外提供 window.t、window.codexboxSetLang 与 MutationObserver 动态翻译能力
- * [POS]: public 模块的国际化运行层，以中文为源语言驱动静态界面和动态文案翻译
+ * [POS]: public 模块的国际化运行层，以中文原文缓存驱动界面双向原地切换，不重载渲染进程
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 'use strict';
 /**
  * CodexBox i18n —— 集中式翻译层。
- * 词典在 i18n-dict.js（中文原文为键）；中文是源语言，zh 模式下本文件几乎不做事。
- * EN 模式机制：MutationObserver 在微任务时机翻译新增/变更的文本节点和 title/placeholder 属性，
- * 绘制前完成、无闪烁，app.js 不需要散布翻译调用。用户内容区（预览/编辑器/终端）一律不碰。
+ * 词典在 i18n-dict.js（中文原文为键）。保留节点原文，切换语言时重绘现有 DOM；
+ * 新增和更新的界面节点由 MutationObserver 接管。用户内容区（预览/编辑器/终端）一律不碰。
  */
 (() => {
   const saved = localStorage.getItem('codexbox_lang');
   const sys = (navigator.language || 'en').toLowerCase();
-  const lang = saved === 'zh' || saved === 'en' ? saved : (sys.startsWith('zh') ? 'zh' : 'en');
-  window.codexboxLang = lang;
+  let lang = saved === 'zh' || saved === 'en' ? saved : (sys.startsWith('zh') ? 'zh' : 'en');
+  const textSources = new WeakMap();
+  const textRendered = new WeakMap();
+  const attrSources = new WeakMap();
+  const attrRendered = new WeakMap();
 
-  // 语言切换：记到 localStorage（渲染层）+ config.json（Electron 菜单读），刷新生效
-  window.codexboxSetLang = (l) => {
-    localStorage.setItem('codexbox_lang', l);
-    fetch('/api/lang', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lang: l }) })
-      .catch(() => {}).finally(() => location.reload());
-  };
-  const wireToggle = () => {
-    const el = document.getElementById('lang-toggle');
-    if (!el) return;
-    el.textContent = lang === 'zh' ? 'EN' : '中文';
-    el.title = lang === 'zh' ? 'Switch to English' : '切换为中文';
-    el.onclick = () => window.codexboxSetLang(lang === 'zh' ? 'en' : 'zh');
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireToggle);
-  else wireToggle();
-
-  if (lang === 'zh') { window.t = (s) => s; return; }
-
-  const HAN = /[㐀-鿿「」（）：；！？…·]/;
+  const HAN = /[\u3400-\u9fff\u300c\u300d\uff08\uff09\uff1a\uff1b\uff01\uff1f\u2026\u00b7]/;
+  const SKIP = '#preview-body, #ed-host, .xterm, .milkdown, .lightbox, .cp-name, .cp-dir, #lang-toggle';
+  const ATTRS = ['title', 'placeholder'];
   const dict = () => window.CODEXBOX_DICT || {};
   const rules = () => window.CODEXBOX_DICT_RULES || [];
+
   const trOne = (core) => {
     const hit = dict()[core];
     if (hit !== undefined) return hit;
     for (const [re, rep] of rules()) {
-      const m = core.match(re);
-      if (m) {
-        try { return typeof rep === 'function' ? rep(m) : rep; } catch { /* 规则异常不挡显示 */ }
+      const match = core.match(re);
+      if (match) {
+        try { return typeof rep === 'function' ? rep(match) : rep; } catch { /* 规则异常不挡显示 */ }
       }
     }
     return null;
   };
-  const tr = (s) => {
-    if (!s || !HAN.test(s)) return s;
-    const core = s.trim();
+
+  const translate = (value) => {
+    if (!value || !HAN.test(value)) return value;
+    const core = value.trim();
     const whole = trOne(core);
-    if (whole !== null) return s.replace(core, whole);
-    // 复合文案（「刚刚 · 12 条消息 · 改了 16 个文件」）整段匹配不上：按 · 分段逐段翻
+    if (whole !== null) return value.replace(core, whole);
+    // 复合文案（「刚刚 · 12 条消息 · 改了 16 个文件」）整段匹配不上：按 · 分段逐段翻。
     if (core.includes('·')) {
-      const segs = core.split('·').map((x) => x.trim()).filter(Boolean);
-      const parts = segs.map((x) => trOne(x) ?? x);
-      if (parts.some((x, i) => x !== segs[i])) {
+      const segments = core.split('·').map((item) => item.trim()).filter(Boolean);
+      const parts = segments.map((item) => trOne(item) ?? item);
+      if (parts.some((item, index) => item !== segments[index])) {
         const joined = parts.join(' · ') + (/·\s*$/.test(core) ? ' · ' : '');
-        return s.replace(core, joined);
+        return value.replace(core, joined);
       }
     }
-    return s;
+    return value;
   };
-  window.t = tr;
 
-  // 用户内容区不翻译：文件预览正文、三种编辑器、终端、灯箱和终端标题
-  const SKIP = '#preview-body, #ed-host, .xterm, .milkdown, .lightbox, .cp-name, .cp-dir';
-  const ATTRS = ['title', 'placeholder'];
-  const visit = (node) => {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const p = node.parentElement;
-      if (p && p.closest(SKIP)) return;
-      const out = tr(node.nodeValue);
-      if (out !== node.nodeValue) node.nodeValue = out;
-      return;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE || node.closest(SKIP)) return;
-    for (const a of ATTRS) {
-      const v = node.getAttribute(a);
-      if (v) { const out = tr(v); if (out !== v) node.setAttribute(a, out); }
-    }
-    for (const c of [...node.childNodes]) visit(c);
+  const display = (source) => (lang === 'en' ? translate(source) : source);
+  const skipped = (node) => {
+    const element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    return !!element?.closest(SKIP);
   };
-  const ob = new MutationObserver((muts) => {
-    for (const m of muts) {
-      if (m.type === 'characterData' || m.type === 'attributes') visit(m.target.nodeType ? m.target : m.target);
-      else m.addedNodes.forEach(visit);
+  const mapsFor = (store, element) => {
+    let values = store.get(element);
+    if (!values) { values = new Map(); store.set(element, values); }
+    return values;
+  };
+
+  function renderText(node) {
+    if (skipped(node)) return;
+    const value = node.nodeValue || '';
+    const previous = textRendered.get(node);
+    if (!textSources.has(node) || value !== previous) textSources.set(node, value);
+    const output = display(textSources.get(node));
+    textRendered.set(node, output);
+    if (value !== output) node.nodeValue = output;
+  }
+
+  function renderAttributes(element) {
+    if (skipped(element)) return;
+    const sources = mapsFor(attrSources, element);
+    const rendered = mapsFor(attrRendered, element);
+    for (const attr of ATTRS) {
+      const value = element.getAttribute(attr);
+      if (value === null || value === '') {
+        sources.delete(attr);
+        rendered.delete(attr);
+        continue;
+      }
+      if (!sources.has(attr) || value !== rendered.get(attr)) sources.set(attr, value);
+      const output = display(sources.get(attr));
+      rendered.set(attr, output);
+      if (value !== output) element.setAttribute(attr, output);
+    }
+  }
+
+  function visit(node) {
+    if (node.nodeType === Node.TEXT_NODE) { renderText(node); return; }
+    if (node.nodeType !== Node.ELEMENT_NODE || skipped(node)) return;
+    renderAttributes(node);
+    for (const child of [...node.childNodes]) visit(child);
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'childList') mutation.addedNodes.forEach(visit);
+      else if (mutation.type === 'characterData') renderText(mutation.target);
+      else renderAttributes(mutation.target);
     }
   });
+
+  function wireToggle() {
+    const toggle = document.getElementById('lang-toggle');
+    if (!toggle) return;
+    toggle.textContent = lang === 'zh' ? 'EN' : '中文';
+    // 按钮文字已明确表示目标语言，保留气泡只会挤出窄侧栏。
+    delete toggle.dataset.tip;
+    toggle.removeAttribute('title');
+    toggle.onclick = () => window.codexboxSetLang(lang === 'zh' ? 'en' : 'zh');
+  }
+
+  function applyLanguage(next) {
+    lang = next;
+    window.codexboxLang = lang;
+    window.t = (value) => display(value);
+    document.documentElement.lang = lang;
+    wireToggle();
+    if (document.body) visit(document.body);
+  }
+
+  function persistLanguage(next) {
+    if (typeof window.fetch !== 'function') return Promise.resolve();
+    return window.fetch('/api/lang', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lang: next }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('语言配置保存失败');
+        return response.json();
+      })
+      .then(() => window.codexboxLocale?.refreshMenu?.())
+      .catch(() => {});
+  }
+
+  window.codexboxSetLang = (value) => {
+    const next = value === 'en' || value === 'zh' ? value : lang;
+    localStorage.setItem('codexbox_lang', next);
+    applyLanguage(next);
+    return persistLanguage(next);
+  };
   const start = () => {
-    visit(document.body);
-    ob.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
-    document.documentElement.lang = 'en';
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+    applyLanguage(lang);
   };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
 })();
