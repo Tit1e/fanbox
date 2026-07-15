@@ -78,11 +78,11 @@ function iconColorFor(e) {
     return '#9b8b6e';
   }
   if (t === 'editorial') {
-    if (e.isDir) return '#0a0a0a';
     if (['html', 'htm'].includes(ex)) return '#ff433d';
     if (['md', 'markdown'].includes(ex)) return '#0000ee';
     if (e.kind === 'data' || ['csv', 'tsv'].includes(ex)) return '#00a33e';
-    return '#0a0a0a';
+    // 单色图标跟随容器颜色，选中黑底时由主题样式统一反白。
+    return 'currentColor';
   }
   // terminal：暖色多彩，文件夹用中性灰绿不抢 volt
   if (e.isDir) return '#9aa08a';

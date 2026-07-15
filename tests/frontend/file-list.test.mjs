@@ -1,15 +1,32 @@
 /**
- * [INPUT]: 依赖 happy-dom 与 public/generated/ui.mjs 中的 Svelte 主文件列表服务
- * [OUTPUT]: 验证网格/列表渲染、选择游标、变更标记、收藏和文件动作转发
+ * [INPUT]: 依赖 happy-dom、public/generated/ui.mjs、图标工厂与基础主题样式
+ * [OUTPUT]: 验证网格/列表渲染、选择游标、索引主题选中图标对比度、收藏和文件动作转发
  * [POS]: tests/frontend 的 Svelte FileList 回归测试，保护主工作区文件交互
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { installDom } from './dom-environment.mjs';
 import { loadRendererModule } from './dom-environment.mjs';
 
 const { createFileBrowserController } = await loadRendererModule('file-browser');
+const { createIcons } = await loadRendererModule('icons');
+
+test('索引主题的选中文件夹图标使用反色保持可见', async () => {
+  const dom = installDom();
+  try {
+    const folderIcon = createIcons({ theme: 'editorial' }).iconSvg({
+      name: 'build', isDir: true, kind: 'dir',
+    }, 64);
+    const css = await readFile(new URL('../../public/styles/base.css', import.meta.url), 'utf8');
+
+    assert.match(folderIcon, /class="rich-glyph"[^>]*fill="none">[\s\S]*fill="currentColor"/);
+    assert.match(css, /\[data-theme="editorial"\] \.list \.row\.selected \.icon,\s*\[data-theme="editorial"\] \.grid \.item\.selected \.icon \{ color: var\(--bg\); \}/);
+  } finally {
+    dom.cleanup();
+  }
+});
 
 test('文件列表渲染网格状态并转发选择、收藏和菜单动作', async () => {
   const dom = installDom('<div id="file-area"></div>');
