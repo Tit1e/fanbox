@@ -120,6 +120,8 @@ The three skins are not simple color swaps: palette, typography, icons, code hig
 
 - **真实内嵌终端 / A real embedded terminal** — node-pty + xterm.js（WebGL 渲染），跑 Codex / vim / htop 不花屏，中文宽字符正确。
   node-pty + xterm.js (WebGL). Codex / vim / htop render correctly, CJK wide characters included.
+- **项目运行命令 / Project run commands**：在任意目录保存 `npm run dev` 等命令，子目录自动继承最近规则；服务在规则目录后台运行，顶栏可运行、重启、停止或查看输出，左侧项目列表会显示状态点。
+  Save commands such as `npm run dev` in any folder and let child folders inherit the nearest rule. Services run in the configured folder, with top-bar controls and a project-list status dot; open their output only when needed.
 - **拖文件进终端 / Drag files in** — 从文件列表拖文件/文件夹进终端，自动插入路径喂给 Codex 当上下文。
   Drop a file or folder into the terminal to insert its path as Codex context.
 - **路径可点击 / Clickable paths** — 终端里出现的文件路径直接点击在 CodexBox 打开；带空格的 macOS 截屏名、中文文件名、折行的长路径都能识别（空格边界由文件系统 stat 验证，不靠猜）。
