@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖 happy-dom 与 public/generated/ui.mjs 中的 Svelte 上下文菜单服务
- * [OUTPUT]: 验证菜单渲染、视口定位、动作执行、外部点击与 Escape 关闭
+ * [OUTPUT]: 验证菜单渲染、视口定位、普通点击打开、动作执行、外部点击与 Escape 关闭
  * [POS]: tests/frontend 的 Svelte ContextMenu 回归测试，覆盖文件、侧边栏和终端菜单共用行为
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -53,6 +53,17 @@ test('点击菜单项先关闭菜单再执行动作', async () => {
     await settle();
     assert.equal(menuVisibleDuringAction, false);
     assert.equal(document.querySelector('#context-menu'), null);
+  } finally { dom.cleanup(); }
+});
+
+test('普通点击打开菜单不会被同一次点击关闭', async () => {
+  const dom = installDom('<button id="menu-trigger">设置</button>');
+  try {
+    const menus = await setup();
+    document.querySelector('#menu-trigger').onclick = (event) => menus.popupMenu(event, [{ label: '编辑运行命令', fn() {} }]);
+    document.querySelector('#menu-trigger').click();
+    await settle();
+    assert.equal(document.querySelector('#context-menu .ctx-item')?.textContent, '编辑运行命令');
   } finally { dom.cleanup(); }
 });
 

@@ -12,9 +12,14 @@
   let left = $state(8);
   let top = $state(8);
   let menuElement = $state(null);
+  let triggerEvent = null;
 
   export async function open(event, nextItems) {
     event?.preventDefault?.();
+    triggerEvent = event || null;
+    queueMicrotask(() => {
+      if (triggerEvent === event) triggerEvent = null;
+    });
     items = nextItems || [];
     left = Math.max(8, event?.clientX || 0);
     top = Math.max(8, event?.clientY || 0);
@@ -37,6 +42,8 @@
   }
 
   function outside(event) {
+    // 按钮 click 打开菜单时，不能把同一次冒泡当作外部点击关闭。
+    if (event === triggerEvent) return;
     if (visible && !event.target.closest('#context-menu')) close();
   }
 

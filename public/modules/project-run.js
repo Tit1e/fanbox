@@ -1,6 +1,6 @@
 /**
  * [INPUT]: 依赖运行规则 API、终端服务会话、通用输入/菜单交互与当前目录 state
- * [OUTPUT]: 对外提供 createProjectRunController，管理顶栏运行动作、规则设置/移除和项目运行状态
+ * [OUTPUT]: 对外提供 createProjectRunController，管理顶栏运行动作、规则设置和项目运行状态
  * [POS]: public/modules 的项目运行命令控制器，连接目录规则、隐藏 PTY 服务与侧边栏状态
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
@@ -105,27 +105,11 @@ export function createProjectRunController(deps) {
   function configure(event) {
     if (!context.rule) { void saveRule(context.path, ''); return; }
     const rule = context.rule;
+    if (!rule.inherited) { void saveRule(rule.cwd, rule.command); return; }
     popupMenu(event, [
-      { label: rule.inherited ? '编辑继承的命令' : '编辑运行命令', fn: () => saveRule(rule.cwd, rule.command) },
-      ...(rule.inherited
-        ? [{ label: '在当前目录新建覆盖', fn: () => saveRule(context.path, '') }]
-        : [{ label: '移除运行命令', danger: true, fn: () => void removeRule(rule) }]),
+      { label: '编辑继承的命令', fn: () => saveRule(rule.cwd, rule.command) },
+      { label: '在当前目录新建覆盖', fn: () => saveRule(context.path, '') },
     ]);
-  }
-
-  async function removeRule(rule) {
-    if (ruleIsRunning(rule)) { toast('请先停止正在运行的命令', true); return; }
-    context.action = 'remove';
-    render();
-    try {
-      const result = await apiPost('/api/run-rule/delete', { path: rule.cwd });
-      if (!result.ok) { toast(result.error || '移除运行命令失败', true); return; }
-      toast('运行命令已移除');
-      await loadRule(state.cwd);
-    } catch { toast('移除运行命令失败', true); }
-    finally {
-      if (context.path === state.cwd) { context.action = ''; render(); }
-    }
   }
 
   async function runAction(name, action) {
